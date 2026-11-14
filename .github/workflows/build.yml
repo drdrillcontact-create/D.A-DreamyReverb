@@ -1,26 +1,34 @@
-name: Build D.A Dreamy Reverb
+name: Build D.A Dreamy Shimmer Reverb
 
 on:
   push:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: Windows x64 (VST3)
             os: windows-latest
-            artifact: DreamyReverb-Windows-x64-VST3
-            configure: cmake -B build -A x64
+            artifact: DreamyShimmerReverb-Windows-x64-VST3
+            configure: cmake -B build -A x64 -DDREAMY_BUILD_TESTS=ON
+            tests: build/Release
           - name: macOS Universal (AU + VST3)
             os: macos-latest
-            artifact: DreamyReverb-macOS-AU-VST3
-            configure: cmake -B build -DCMAKE_BUILD_TYPE=Release
+            artifact: DreamyShimmerReverb-macOS-AU-VST3
+            configure: cmake -B build -DCMAKE_BUILD_TYPE=Release -DDREAMY_BUILD_TESTS=ON
+            tests: build
 
     steps:
       - name: Checkout
@@ -30,11 +38,24 @@ jobs:
         run: ${{ matrix.configure }}
 
       - name: Build
-        run: cmake --build build --config Release --parallel 4
+        run: |
+          set -o pipefail
+          cmake --build build --config Release --parallel 4 2>&1 | tee build.log
 
+      # ---- self tests ------------------------------------------------------
+      - name: DSP self test
+        run: |
+          set -o pipefail
+          "${{ matrix.tests }}/DreamyDspTest" 2>&1 | tee dsp-test.log
+
+      - name: Plugin self test (parameters, presets, state, audio, editor)
+        run: |
+          set -o pipefail
+          "${{ matrix.tests }}/DreamyPluginTest" snapshots 2>&1 | tee plugin-test.log
+
+      # ---- package ---------------------------------------------------------
       - name: Collect plugins (Windows)
         if: runner.os == 'Windows'
-        shell: bash
         run: |
           mkdir -p package
           find build -path "*_artefacts*" -type d -name "*.vst3" -prune -exec cp -R {} package/ \;
@@ -51,11 +72,63 @@ jobs:
           # ad-hoc sign so the bundles load on Apple Silicon
           for b in staging/*; do codesign --force --deep --sign - "$b"; done
           # zip here so bundle permissions survive the artifact upload
-          ditto -c -k staging "package/DreamyReverb-macOS.zip"
+          ditto -c -k staging "package/DreamyShimmerReverb-macOS.zip"
 
-      - name: Upload
+      - name: Upload plugins
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: package
           if-no-files-found: error
+
+      - name: Upload editor snapshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-snapshots-${{ runner.os }}
+          path: snapshots
+          if-no-files-found: warn
+
+      # ---- validation in a real plugin host ---------------------------------
+      - name: Validate VST3 with pluginval (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          set -o pipefail
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip
+          unzip -q -o pluginval.zip
+          ./pluginval.exe --strictness-level 5 --validate-in-process --timeout-ms 600000 \
+            --validate "package/D.A Dreamy Shimmer Reverb.vst3" 2>&1 | tee pluginval-vst3.log
+
+      - name: Validate VST3 with pluginval (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -o pipefail
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
+          unzip -q -o pluginval.zip
+          pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process --timeout-ms 600000 \
+            --validate "staging/D.A Dreamy Shimmer Reverb.vst3" 2>&1 | tee pluginval-vst3.log
+
+      - name: Validate AU with auval and pluginval (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -o pipefail
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "staging/D.A Dreamy Shimmer Reverb.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar || true
+          sleep 3
+          auval -v aufx Drvb Drma 2>&1 | tee auval.log
+          pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process --timeout-ms 600000 \
+            --validate ~/Library/Audio/Plug-Ins/Components/"D.A Dreamy Shimmer Reverb.component" 2>&1 | tee pluginval-au.log
+
+      # ---- temporary: hand logs and snapshots back to the developer ------------
+      - name: Publish debug data
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for f in build.log dsp-test.log plugin-test.log pluginval-vst3.log auval.log pluginval-au.log snapshots/*.png; do
+            [ -f "$f" ] || continue
+            if [ "$f" = "build.log" ]; then tail -c 300000 "$f" > trimmed.bin; else cp "$f" trimmed.bin; fi
+            base64 < trimmed.bin | tr -d '\r\n' > blob.b64
+            sha=$(gh api "repos/$GITHUB_REPOSITORY/git/blobs" -f encoding=base64 -F content=@blob.b64 --jq .sha) || sha="upload-failed"
+            echo "::notice title=debug-blob::$f $sha"
+          done
