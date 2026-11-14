@@ -7,7 +7,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "" FORCE)
 # Windows: link the MSVC runtime statically so users need no redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(DreamyReverb VERSION 1.1.0)
+project(DreamyReverb VERSION 1.2.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,13 +29,14 @@ else()
     set(DREAMY_FORMATS VST3)
 endif()
 
-# The plugin codes and the bundle id are the same as in version 1.0 ("D.A Dreamy Reverb"),
-# so existing sessions keep loading after the rename.
+# "D.A Dreamy Shimmer Reverb" has its own plugin code and bundle id. Version 1.0
+# ("D.A Dreamy Reverb", code Drvb, com.da.dreamyreverb) may still be installed next to it:
+# two plugins with the same id make hosts load only one of them and drop the other.
 juce_add_plugin(DreamyReverb
     COMPANY_NAME                "D.A"
-    BUNDLE_ID                   "com.da.dreamyreverb"
+    BUNDLE_ID                   "com.da.dreamyshimmerreverb"
     PLUGIN_MANUFACTURER_CODE    Drma
-    PLUGIN_CODE                 Drvb
+    PLUGIN_CODE                 Dshr
     FORMATS                     ${DREAMY_FORMATS}
     PRODUCT_NAME                "D.A Dreamy Shimmer Reverb"
     DESCRIPTION                 "Lush shimmer reverb"

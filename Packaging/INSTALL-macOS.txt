@@ -1,0 +1,55 @@
+D.A Dreamy Shimmer Reverb 1.2 - macOS (AU + VST3, Apple Silicon and Intel)
+==========================================================================
+
+Recommended: the installer
+--------------------------
+1. Close your DAW.
+2. Right-click (or Control-click)  "D.A Dreamy Shimmer Reverb Installer.pkg"
+   and choose Open, then Open again.
+   On macOS 15 or newer: double-click it once, then open
+   System Settings > Privacy & Security, scroll down and click "Open Anyway".
+   (The plugin is not notarized by Apple, so macOS asks once.)
+3. Follow the installer. It puts the plugin into
+       /Library/Audio/Plug-Ins/Components   (Audio Unit: Logic, GarageBand, ...)
+       /Library/Audio/Plug-Ins/VST3         (VST3: Ableton, Cubase, FL Studio, ...)
+4. Start the DAW. The plugin is listed as "D.A Dreamy Shimmer Reverb",
+   manufacturer "D.A". In Logic it is under Audio Units > D.A.
+
+Manual install (instead of the installer)
+-----------------------------------------
+Unzip Manual-Install.zip and copy
+    D.A Dreamy Shimmer Reverb.component  ->  ~/Library/Audio/Plug-Ins/Components/
+    D.A Dreamy Shimmer Reverb.vst3       ->  ~/Library/Audio/Plug-Ins/VST3/
+Then open Terminal and run these two lines. Without them macOS blocks the
+plugin and no DAW can load it:
+
+    xattr -cr ~/Library/Audio/Plug-Ins/Components/"D.A Dreamy Shimmer Reverb.component"
+    xattr -cr ~/Library/Audio/Plug-Ins/VST3/"D.A Dreamy Shimmer Reverb.vst3"
+
+Notes
+- The old "D.A Dreamy Reverb" (version 1.0) can stay installed. Both plugins
+  work side by side; old projects keep using the old plugin.
+- If Logic does not show the plugin, restart the Mac once (this refreshes the
+  Audio Unit cache).
+
+--------------------------------------------------------------------------
+
+نصب در مک
+
+روش پیشنهادی: نصب‌کننده
+۱. DAW را ببندید.
+۲. روی فایل  D.A Dreamy Shimmer Reverb Installer.pkg  راست‌کلیک (یا Control-کلیک) کنید و Open را بزنید، سپس دوباره Open.
+   در macOS 15 به بالا: یک بار دابل‌کلیک کنید، بعد به System Settings > Privacy & Security بروید و پایین صفحه Open Anyway را بزنید.
+   (پلاگین توسط اپل notarize نشده، برای همین macOS یک بار می‌پرسد.)
+۳. مراحل نصب را ادامه دهید. پلاگین در این مسیرها نصب می‌شود:
+       /Library/Audio/Plug-Ins/Components   (AU برای Logic و GarageBand)
+       /Library/Audio/Plug-Ins/VST3         (VST3 برای Ableton، Cubase، FL Studio)
+۴. DAW را باز کنید. نام پلاگین: D.A Dreamy Shimmer Reverb (سازنده: D.A)
+
+نصب دستی
+فایل Manual-Install.zip را باز کنید، دو فایل را در مسیرهای بالا (داخل پوشهٔ Library کاربر) کپی کنید
+و حتماً دو دستور xattr بالا را در Terminal اجرا کنید؛ بدون آن‌ها macOS پلاگین را بلاک می‌کند و در هیچ DAW ای لود نمی‌شود.
+
+نکته‌ها
+- نسخهٔ قدیمی (D.A Dreamy Reverb 1.0) می‌تواند نصب بماند؛ هر دو کنار هم کار می‌کنند.
+- اگر Logic پلاگین را نشان نداد، یک بار مک را ری‌استارت کنید.

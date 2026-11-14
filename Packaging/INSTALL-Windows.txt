@@ -1,0 +1,42 @@
+D.A Dreamy Shimmer Reverb 1.2 - Windows (VST3, 64-bit)
+======================================================
+
+1. Close your DAW.
+2. Copy the whole folder
+
+       D.A Dreamy Shimmer Reverb.vst3
+
+   into
+
+       C:\Program Files\Common Files\VST3\
+
+   (Copy the folder itself, with everything inside it.)
+3. Start the DAW and rescan plugins. The plugin is listed as
+   "D.A Dreamy Shimmer Reverb", manufacturer "D.A".
+
+FL Studio:   Options > Manage plugins > Find installed plugins
+Ableton:     Preferences > Plug-Ins > turn on "Use VST3 Plug-In System Folders" > Rescan
+Cubase:      Studio > VST Plug-in Manager > Rescan
+
+Notes
+- This is a 64-bit VST3. It does not load in 32-bit hosts or as VST2.
+- The old "D.A Dreamy Reverb" (version 1.0) can stay installed. Both plugins
+  work side by side; old projects keep using the old plugin.
+- If Windows blocked the download: right-click the downloaded .zip >
+  Properties > tick "Unblock" > OK, then extract it again.
+
+--------------------------------------------------------------------------
+
+نصب در ویندوز
+
+۱. DAW را ببندید.
+۲. کل پوشهٔ  D.A Dreamy Shimmer Reverb.vst3  را (خودِ پوشه با همهٔ محتویاتش) در این مسیر کپی کنید:
+       C:\Program Files\Common Files\VST3\
+۳. DAW را باز کنید و پلاگین‌ها را دوباره اسکن کنید. نام پلاگین در لیست:
+   D.A Dreamy Shimmer Reverb  (سازنده: D.A)
+
+نکته‌ها
+- این پلاگین VST3 شصت‌وچهار بیتی است؛ در هاست ۳۲ بیتی یا به‌صورت VST2 لود نمی‌شود.
+- نسخهٔ قدیمی (D.A Dreamy Reverb 1.0) می‌تواند نصب بماند؛ هر دو کنار هم کار می‌کنند.
+- اگر ویندوز فایل دانلودشده را بلاک کرده: روی فایل zip راست‌کلیک > Properties > تیک Unblock > OK
+  و دوباره Extract کنید.

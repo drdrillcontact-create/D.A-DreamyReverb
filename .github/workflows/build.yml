@@ -62,20 +62,40 @@ jobs:
         run: |
           mkdir -p package
           find build -path "*_artefacts*" -type d -name "*.vst3" -prune -exec cp -R {} package/ \;
+          cp Packaging/INSTALL-Windows.txt package/INSTALL.txt
           ls -la package
-          test -n "$(ls -A package)"
+          test -d "package/D.A Dreamy Shimmer Reverb.vst3"
 
-      - name: Collect plugins (macOS)
+      - name: Collect plugins and build the installer (macOS)
         if: runner.os == 'macOS'
         run: |
           mkdir -p staging package
           find build -path "*_artefacts*" -type d \( -name "*.vst3" -o -name "*.component" \) -prune -exec cp -R {} staging/ \;
           ls -la staging
-          test -n "$(ls -A staging)"
+          test -d "staging/D.A Dreamy Shimmer Reverb.component"
+          test -d "staging/D.A Dreamy Shimmer Reverb.vst3"
+          lipo -archs "staging/D.A Dreamy Shimmer Reverb.component/Contents/MacOS/D.A Dreamy Shimmer Reverb"
           # ad-hoc sign so the bundles load on Apple Silicon
-          for b in staging/*; do codesign --force --deep --sign - "$b"; done
-          # zip here so bundle permissions survive the artifact upload
-          ditto -c -k staging "package/DreamyShimmerReverb-macOS.zip"
+          for b in staging/*; do codesign --force --deep --sign - "$b"; codesign --verify --deep --strict "$b"; done
+
+          # installer package: puts both plugins into /Library/Audio/Plug-Ins.
+          # Files installed by a package are not quarantined by Gatekeeper.
+          mkdir -p pkgroot/Library/Audio/Plug-Ins/Components pkgroot/Library/Audio/Plug-Ins/VST3 pkgscripts
+          cp -R staging/*.component pkgroot/Library/Audio/Plug-Ins/Components/
+          cp -R staging/*.vst3 pkgroot/Library/Audio/Plug-Ins/VST3/
+          printf '#!/bin/sh\nkillall -9 AudioComponentRegistrar 2>/dev/null\nexit 0\n' > pkgscripts/postinstall
+          chmod +x pkgscripts/postinstall
+          pkgbuild --analyze --root pkgroot components.plist
+          # never "relocate" the bundles to another copy found on the disk
+          python3 -c "import plistlib; p='components.plist'; d=plistlib.load(open(p,'rb')); [c.update(BundleIsRelocatable=False) for c in d]; plistlib.dump(d,open(p,'wb')); print(len(d),'bundles')"
+          pkgbuild --root pkgroot --component-plist components.plist --scripts pkgscripts \
+                   --identifier com.da.dreamyshimmerreverb.installer --version 1.2.0 --install-location / \
+                   "package/D.A Dreamy Shimmer Reverb Installer.pkg"
+
+          # the bundles as well, for a manual install (zipped here so permissions survive the upload)
+          ditto -c -k staging "package/Manual-Install.zip"
+          cp Packaging/INSTALL-macOS.txt package/INSTALL.txt
+          ls -la package
 
       - name: Upload plugins
         uses: actions/upload-artifact@v7
@@ -91,33 +111,44 @@ jobs:
           path: snapshots
           if-no-files-found: warn
 
-      # ---- validation in a real plugin host ---------------------------------
+      # ---- validation in a plugin host ----------------------------------------
       - name: Validate VST3 with pluginval (Windows)
         if: runner.os == 'Windows'
         run: |
           set -o pipefail
           curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip
           unzip -q -o pluginval.zip
-          ./pluginval.exe --strictness-level 5 --validate-in-process --timeout-ms 600000 \
+          ./pluginval.exe --strictness-level 10 --validate-in-process --timeout-ms 900000 \
             --validate "package/D.A Dreamy Shimmer Reverb.vst3" 2>&1 | tee pluginval-vst3.log
 
-      - name: Validate VST3 with pluginval (macOS)
+      - name: Install with the package, then validate AU and VST3 (macOS)
         if: runner.os == 'macOS'
         run: |
           set -o pipefail
+          sudo installer -pkg "package/D.A Dreamy Shimmer Reverb Installer.pkg" -target /
+          ls -la /Library/Audio/Plug-Ins/Components /Library/Audio/Plug-Ins/VST3
+          test -d "/Library/Audio/Plug-Ins/Components/D.A Dreamy Shimmer Reverb.component"
+          test -d "/Library/Audio/Plug-Ins/VST3/D.A Dreamy Shimmer Reverb.vst3"
+          codesign --verify --deep --strict "/Library/Audio/Plug-Ins/Components/D.A Dreamy Shimmer Reverb.component"
+          codesign --verify --deep --strict "/Library/Audio/Plug-Ins/VST3/D.A Dreamy Shimmer Reverb.vst3"
+          sleep 3
+          auval -v aufx Dshr Drma 2>&1 | tee auval.log
+
           curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
           unzip -q -o pluginval.zip
-          pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process --timeout-ms 600000 \
-            --validate "staging/D.A Dreamy Shimmer Reverb.vst3" 2>&1 | tee pluginval-vst3.log
+          pluginval.app/Contents/MacOS/pluginval --strictness-level 10 --validate-in-process --timeout-ms 900000 \
+            --validate "/Library/Audio/Plug-Ins/VST3/D.A Dreamy Shimmer Reverb.vst3" 2>&1 | tee pluginval-vst3.log
+          pluginval.app/Contents/MacOS/pluginval --strictness-level 10 --validate-in-process --timeout-ms 900000 \
+            --validate "/Library/Audio/Plug-Ins/Components/D.A Dreamy Shimmer Reverb.component" 2>&1 | tee pluginval-au.log
 
-      - name: Validate AU with auval and pluginval (macOS)
-        if: runner.os == 'macOS'
+      # ---- report problems as annotations ---------------------------------------
+      - name: Report failures
+        if: failure()
         run: |
-          set -o pipefail
-          mkdir -p ~/Library/Audio/Plug-Ins/Components
-          cp -R "staging/D.A Dreamy Shimmer Reverb.component" ~/Library/Audio/Plug-Ins/Components/
-          killall -9 AudioComponentRegistrar || true
-          sleep 3
-          auval -v aufx Drvb Drma 2>&1 | tee auval.log
-          pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process --timeout-ms 600000 \
-            --validate ~/Library/Audio/Plug-Ins/Components/"D.A Dreamy Shimmer Reverb.component" 2>&1 | tee pluginval-au.log
+          for f in build.log dsp-test.log plugin-test.log pluginval-vst3.log auval.log pluginval-au.log; do
+            [ -f "$f" ] || continue
+            grep -n -i -E "error|FAIL|!!!|assert" "$f" | grep -v -i "warning" | head -n 8 | while IFS= read -r line; do
+              echo "::error title=$f::${line:0:900}"
+            done
+          done
+          exit 0
