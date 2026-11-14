@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -118,17 +118,3 @@ jobs:
           auval -v aufx Drvb Drma 2>&1 | tee auval.log
           pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process --timeout-ms 600000 \
             --validate ~/Library/Audio/Plug-Ins/Components/"D.A Dreamy Shimmer Reverb.component" 2>&1 | tee pluginval-au.log
-
-      # ---- temporary: hand logs and snapshots back to the developer ------------
-      - name: Publish debug data
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for f in build.log dsp-test.log plugin-test.log pluginval-vst3.log auval.log pluginval-au.log snapshots/*.png; do
-            [ -f "$f" ] || continue
-            if [ "$f" = "build.log" ]; then tail -c 300000 "$f" > trimmed.bin; else cp "$f" trimmed.bin; fi
-            base64 < trimmed.bin | tr -d '\r\n' > blob.b64
-            sha=$(gh api "repos/$GITHUB_REPOSITORY/git/blobs" -f encoding=base64 -F content=@blob.b64 --jq .sha) || sha="upload-failed"
-            echo "::notice title=debug-blob::$f $sha"
-          done

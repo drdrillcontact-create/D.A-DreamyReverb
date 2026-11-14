@@ -5,7 +5,7 @@ A lush shimmer reverb plugin built with JUCE 8: a modulated reverb whose tail cl
 * **Windows 64-bit:** VST3
 * **macOS (Universal: Apple Silicon + Intel):** AU and VST3
 
-![interface](Design/aurora-design.png)
+![interface](Design/screenshot.png)
 
 ## Interface
 
@@ -120,7 +120,7 @@ Source/PluginProcessor.*       parameters, presets, state, audio callback
 Source/PluginEditor.*          user interface
 Assets/Fonts/                  Jost typeface (SIL Open Font License, see OFL.txt)
 Tests/                         self tests
-Design/aurora-design.png       screenshot of the plugin
+Design/screenshot.png          screenshot of the plugin (rendered by the CI self test)
 .github/workflows/build.yml    CI for Windows and macOS
 ```
 
