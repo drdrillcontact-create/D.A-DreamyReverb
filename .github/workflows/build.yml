@@ -1,0 +1,61 @@
+name: Build D.A Dreamy Reverb
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64 (VST3)
+            os: windows-latest
+            artifact: DreamyReverb-Windows-x64-VST3
+            configure: cmake -B build -A x64
+          - name: macOS Universal (AU + VST3)
+            os: macos-latest
+            artifact: DreamyReverb-macOS-AU-VST3
+            configure: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: ${{ matrix.configure }}
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Collect plugins (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p package
+          find build -path "*_artefacts*" -type d -name "*.vst3" -prune -exec cp -R {} package/ \;
+          ls -la package
+          test -n "$(ls -A package)"
+
+      - name: Collect plugins (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p staging package
+          find build -path "*_artefacts*" -type d \( -name "*.vst3" -o -name "*.component" \) -prune -exec cp -R {} staging/ \;
+          ls -la staging
+          test -n "$(ls -A staging)"
+          # ad-hoc sign so the bundles load on Apple Silicon
+          for b in staging/*; do codesign --force --deep --sign - "$b"; done
+          # zip here so bundle permissions survive the artifact upload
+          ditto -c -k staging "package/DreamyReverb-macOS.zip"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: package
+          if-no-files-found: error
