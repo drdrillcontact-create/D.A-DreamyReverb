@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configure
         run: ${{ matrix.configure }}
@@ -75,14 +75,14 @@ jobs:
           ditto -c -k staging "package/DreamyShimmerReverb-macOS.zip"
 
       - name: Upload plugins
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: package
           if-no-files-found: error
 
       - name: Upload editor snapshots
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: editor-snapshots-${{ runner.os }}
           path: snapshots

@@ -187,6 +187,26 @@ int main()
         check (released.tailRms < late.tailRms * 0.01, "releasing freeze lets the tail fade out");
     }
 
+    // ---- loading a preset empties the reverb without a click -----------------------------------------
+    {
+        const double sr = 48000.0;
+        dreamy::Reverb rv; rv.prepare (sr);
+        dreamy::Reverb::Params p; p.mix = 1.0f; p.decay = 20.0f; p.size = 0.2f;
+        run (rv, p, sr, 256, 2.0, 0.0);
+
+        p.size = 1.0f; p.decay = 3.0f;       // a very different "preset"
+        rv.flush();
+        std::vector<float> out;
+        const auto res = run (rv, p, sr, 256, 0.0, 0.5, &out);
+
+        float biggestStep = 0.0f;
+        for (size_t i = 1; i < out.size(); ++i)
+            biggestStep = std::max (biggestStep, std::fabs (out[i] - out[i - 1]));
+
+        std::snprintf (text, sizeof (text), "flush: the old tail is gone after the fade (rms %.2e, biggest step %.3f)", res.tailRms, biggestStep);
+        check (res.finite && res.tailRms < 1.0e-5 && biggestStep < 0.2, text);
+    }
+
     // ---- random automation of every parameter --------------------------------------------------------
     {
         const double sr = 48000.0;
@@ -203,6 +223,7 @@ int main()
             p.highCut = 1000.0f + 19000.0f * u (rng); p.lowCut = 20.0f + 980.0f * u (rng); p.modDepth = u (rng);
             p.modRate = 0.05f + 2.95f * u (rng); p.shimmer = u (rng); p.width = 1.5f * u (rng);
             p.shimmerMode = (int) (u (rng) * 3.99f); p.freeze = u (rng) < 0.1f;
+            if (u (rng) < 0.05f) rv.flush();
             for (int i = 0; i < n; ++i) { l[(size_t) i] = u (rng) - 0.5f; r[(size_t) i] = u (rng) - 0.5f; }
             rv.setParams (p);
             rv.process (l.data(), r.data(), l.data(), r.data(), n);

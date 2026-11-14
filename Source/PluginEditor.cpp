@@ -94,6 +94,16 @@ juce::Font AuroraLookAndFeel::getPopupMenuFont()
     return makeFont (bookFace, 13.5f, 0.02f);   // menus are separate windows: not scaled with the editor
 }
 
+void AuroraLookAndFeel::drawCornerResizer (juce::Graphics& g, int w, int h, bool isMouseOver, bool isMouseDragging)
+{
+    // three short diagonal lines in the corner
+    const float fw = (float) w, fh = (float) h;
+    g.setColour (aurora_colours::green.withAlpha (isMouseOver || isMouseDragging ? 0.8f : 0.35f));
+
+    for (float inset : { 0.35f, 0.55f, 0.75f })
+        g.drawLine (fw * inset, fh * 0.92f, fw * 0.92f, fh * inset, juce::jmax (1.0f, 1.1f * scale));
+}
+
 void AuroraLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
                                           float pos, float startAngle, float endAngle, juce::Slider& slider)
 {
@@ -356,6 +366,11 @@ void PresetBar::paint (juce::Graphics& g)
 DreamyReverbAudioProcessorEditor::DreamyReverbAudioProcessorEditor (DreamyReverbAudioProcessor& p)
     : AudioProcessorEditor (&p), proc (p)
 {
+    // Read the saved size first: setting the resize limits below already resizes the
+    // (still empty) editor to its minimum size.
+    const int savedWidth = juce::jlimit (minWidth, maxWidth,
+                                         (int) proc.apvts.state.getProperty ("editorWidth", baseWidth));
+
     setLookAndFeel (&lookAndFeel);
     setOpaque (true);
 
@@ -407,9 +422,10 @@ DreamyReverbAudioProcessorEditor::DreamyReverbAudioProcessorEditor (DreamyReverb
     setResizeLimits (minWidth, juce::roundToInt (minWidth / ratio),
                      maxWidth, juce::roundToInt (maxWidth / ratio));
 
-    const int savedWidth = juce::jlimit (minWidth, maxWidth,
-                                         (int) proc.apvts.state.getProperty ("editorWidth", baseWidth));
     setSize (savedWidth, juce::roundToInt (savedWidth / ratio));
+
+    constructed = true;
+    proc.apvts.state.setProperty ("editorWidth", getWidth(), nullptr);
 
     startTimerHz (10);
 }
@@ -643,5 +659,6 @@ void DreamyReverbAudioProcessorEditor::resized()
     }
 
     // remember the size for the next time the editor is opened / the session is reloaded
-    proc.apvts.state.setProperty ("editorWidth", getWidth(), nullptr);
+    if (constructed)
+        proc.apvts.state.setProperty ("editorWidth", getWidth(), nullptr);
 }

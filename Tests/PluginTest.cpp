@@ -195,15 +195,19 @@ int main (int argc, char** argv)
 
         if (editor != nullptr)
         {
-            const double ratio = (double) editor->getWidth() / (double) editor->getHeight();
-            check (std::abs (ratio - 720.0 / 470.0) < 0.01, "editor size is " + juce::String (editor->getWidth()) + " x "
-                                                               + juce::String (editor->getHeight()));
+            check (editor->getWidth() == 720 && editor->getHeight() == 470,
+                   "a new editor opens at 720 x 470 (" + juce::String (editor->getWidth()) + " x " + juce::String (editor->getHeight()) + ")");
             editor->setSize (480, 313);
             editor->setSize (1800, 1175);
             const auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f);
             check (image.isValid() && image.getWidth() == 1800, "the editor paints at its largest size");
+            editor->setSize (900, 588);
         }
 
+        editor.reset();
+
+        editor.reset (proc->createEditor());
+        check (editor != nullptr && editor->getWidth() == 900, "the editor reopens at the size it was closed with");
         editor.reset();
 
         // open and close a few times (catches leaks and dangling listeners)

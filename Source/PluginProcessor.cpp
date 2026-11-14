@@ -224,6 +224,9 @@ void DreamyReverbAudioProcessor::loadPreset (int index)
 
     currentPreset.store (index);
     apvts.state.setProperty ("presetIndex", index, nullptr);
+
+    // start the new preset with an empty reverb (short fade, no pitch glide of the old tail)
+    reverb.flush();
 }
 
 bool DreamyReverbAudioProcessor::isPresetModified() const

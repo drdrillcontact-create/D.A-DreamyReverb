@@ -15,6 +15,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -375,6 +376,11 @@ public:
         shimToneCoef = 1.0f - std::exp (-6.2831853f * 8000.0f / (float) sr);
         shimHpCoef   = 1.0f - std::exp (-6.2831853f * 160.0f / (float) sr);
 
+        fadeStep = 1.0f / (float) (0.01 * sr);
+        wetFade = 1.0f;
+        flushing = false;
+        flushRequested.store (false);
+
         reset();
         snapSmoothers = true;
     }
@@ -388,6 +394,11 @@ public:
     }
 
     void setParams (const Params& p) { params = p; }
+
+    // Fades the tail out (10 ms), empties the reverb, jumps to the current settings and
+    // fades back in. Used when a preset is loaded, so the old tail does not glide in pitch
+    // while the room size changes. Safe to call from any thread.
+    void flush() noexcept            { flushRequested.store (true); }
 
     // In-place safe (inL may equal outL etc.)
     void process (const float* inL, const float* inR, float* outL, float* outR, int numSamples)
@@ -476,6 +487,9 @@ public:
         }
         voiceBWasOn = voiceBOn;
 
+        if (flushRequested.exchange (false))
+            flushing = true;
+
         const float diffG = 0.62f;
         const float hadamardScale = 0.35355339f; // 1/sqrt(8)
 
@@ -493,6 +507,24 @@ public:
             sLevelB += smoothFast * (tLevelB - sLevelB);
             sSize   += smoothSlow * (tSize   - sSize);
             sPre    += smoothSlow * (tPre    - sPre);
+
+            if (flushing)
+            {
+                wetFade -= fadeStep;
+                if (wetFade <= 0.0f)
+                {
+                    wetFade = 0.0f;
+                    flushing = false;
+                    reset();
+                    sSize = tSize; sPre = tPre; sDepth = tDepth; sShim = tShim; sFreeze = tFreeze;
+                    sLpCoef = tLpCoef; sHpG = tHpG; sLevelA = tLevelA; sLevelB = tLevelB;
+                    for (int i = 0; i < numLines; ++i) sGain[i] = tGain[i];
+                }
+            }
+            else if (wetFade < 1.0f)
+            {
+                wetFade = std::min (1.0f, wetFade + fadeStep);
+            }
 
             const float dryL = inL[n];
             const float dryR = inR[n];
@@ -587,8 +619,9 @@ public:
             const float mid  = 0.5f * (wetL0 + wetR0);
             const float side = 0.5f * (wetL0 - wetR0) * sWidth;
 
-            outL[n] = dryL * sDry + (mid + side) * sWet;
-            outR[n] = dryR * sDry + (mid - side) * sWet;
+            const float wetGain = sWet * wetFade;
+            outL[n] = dryL * sDry + (mid + side) * wetGain;
+            outR[n] = dryR * sDry + (mid - side) * wetGain;
         }
     }
 
@@ -644,6 +677,10 @@ private:
     float sDry = 1, sWet = 0, sSize = 1, sPre = 1, sDepth = 0, sShim = 0, sWidth = 1, sFreeze = 0;
     float sLpCoef = 0.5f, sHpG = 0.01f, sLevelA = 1.0f, sLevelB = 0.0f;
     bool snapSmoothers = true;
+
+    std::atomic<bool> flushRequested { false };
+    bool  flushing = false;
+    float wetFade = 1.0f, fadeStep = 0.002f;
 };
 
 } // namespace dreamy
