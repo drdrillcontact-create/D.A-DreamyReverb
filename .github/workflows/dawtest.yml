@@ -1,0 +1,80 @@
+# TEMPORARY: loads an already built plugin in a real DAW (REAPER) for debugging.
+name: DAW load test (temporary)
+
+on:
+  push:
+    paths:
+      - 'Tests/daw/**'
+      - '.github/workflows/dawtest.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  NEW_RUN: '43644564990'
+  OLD_RUN: '43639108729'
+
+jobs:
+  daw:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: win-new
+            os: windows-latest
+            artifact: DreamyShimmerReverb-Windows-x64-VST3
+            old: ''
+            fx: 'VST3:D.A Dreamy Shimmer Reverb'
+          - name: mac-new
+            os: macos-latest
+            artifact: DreamyShimmerReverb-macOS-AU-VST3
+            old: ''
+            fx: 'VST3:D.A Dreamy Shimmer Reverb;AU:D.A Dreamy Shimmer Reverb'
+          - name: win-old-and-new
+            os: windows-latest
+            artifact: DreamyShimmerReverb-Windows-x64-VST3
+            old: DreamyReverb-Windows-x64-VST3
+            fx: 'VST3:D.A Dreamy Shimmer Reverb;VST3:D.A Dreamy Reverb'
+          - name: mac-old-and-new
+            os: macos-latest
+            artifact: DreamyShimmerReverb-macOS-AU-VST3
+            old: DreamyReverb-macOS-AU-VST3
+            fx: 'VST3:D.A Dreamy Shimmer Reverb;AU:D.A Dreamy Shimmer Reverb;VST3:D.A Dreamy Reverb;AU:D.A Dreamy Reverb'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download plugin builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$NEW_RUN" -R "$GITHUB_REPOSITORY" -n "${{ matrix.artifact }}" -D plugin-new
+          find plugin-new -maxdepth 4 | head -30
+          if [ -n "${{ matrix.old }}" ]; then
+            gh run download "$OLD_RUN" -R "$GITHUB_REPOSITORY" -n "${{ matrix.old }}" -D plugin-old
+            find plugin-old -maxdepth 2 | head
+          fi
+
+      - name: Run REAPER
+        env:
+          DAWTEST_FX: ${{ matrix.fx }}
+        run: |
+          if [ -n "${{ matrix.old }}" ]; then OLD=plugin-old; else OLD=""; fi
+          Tests/daw/run.sh plugin-new $OLD 2>&1 | tee dawtest.log
+
+      - name: Publish debug data
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for f in dawtest.log dawtest/*.png; do
+            [ -f "$f" ] || continue
+            base64 < "$f" | tr -d '\r\n' > blob.b64
+            sha=$(gh api "repos/$GITHUB_REPOSITORY/git/blobs" -f encoding=base64 -F content=@blob.b64 --jq .sha) || sha="upload-failed"
+            echo "::notice title=debug-blob::$f $sha"
+          done
