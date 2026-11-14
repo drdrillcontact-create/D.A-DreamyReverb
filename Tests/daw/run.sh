@@ -47,10 +47,22 @@ else
     cp -R oldstaging/*.component ~/Library/Audio/Plug-Ins/Components/
     cp -R oldstaging/*.vst3 ~/Library/Audio/Plug-Ins/VST3/
   fi
-  ditto -x -k "$PLUGIN_DIR"/*.zip staging
-  cp -R staging/*.component ~/Library/Audio/Plug-Ins/Components/
-  cp -R staging/*.vst3 ~/Library/Audio/Plug-Ins/VST3/
-  ls -la ~/Library/Audio/Plug-Ins/Components ~/Library/Audio/Plug-Ins/VST3
+  ls -la "$PLUGIN_DIR"
+  spctl --status || true
+  if [ "${DAWTEST_INSTALL:-pkg}" = "pkg" ]; then
+    sudo installer -pkg "$PLUGIN_DIR"/*.pkg -target /
+  else
+    # manual install; "quarantine" marks the files the way a browser download does
+    ditto -x -k "$PLUGIN_DIR/Manual-Install.zip" staging
+    cp -R staging/*.component ~/Library/Audio/Plug-Ins/Components/
+    cp -R staging/*.vst3 ~/Library/Audio/Plug-Ins/VST3/
+    if [ "$DAWTEST_INSTALL" = "quarantine" ]; then
+      Q="0083;$(printf %x "$(date +%s)");Safari;$(uuidgen)"
+      xattr -r -w com.apple.quarantine "$Q" ~/Library/Audio/Plug-Ins/Components/*.component ~/Library/Audio/Plug-Ins/VST3/*.vst3
+      xattr -l ~/Library/Audio/Plug-Ins/VST3/*.vst3 | head -3
+    fi
+  fi
+  ls -la ~/Library/Audio/Plug-Ins/Components ~/Library/Audio/Plug-Ins/VST3 /Library/Audio/Plug-Ins/Components /Library/Audio/Plug-Ins/VST3
   killall -9 AudioComponentRegistrar 2>/dev/null || true
   export DAWTEST_OUT="$WORK/result.txt"
   export DAWTEST_DIR="$WORK"
@@ -86,12 +98,13 @@ attempt() {   # attempt <label>
   echo "launching REAPER ($1), fx = $DAWTEST_FX"
   "$REAPER" -nosplash -splashlog "$DAWTEST_DIR/splash-$1.log" "$SCRIPT" > "$WORK/reaper-stdout.log" 2>&1 &
   PID=$!
-  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-    sleep 5
-    if [ "$i" = 3 ] || [ "$i" = 6 ]; then shot "$1-screen-$i"; fi
+  local shown=0
+  for i in $(seq 1 80); do
+    sleep 1
+    if [ "$shown" = 0 ] && grep -q "^DONE" "$WORK/result.txt" 2>/dev/null; then shown=1; sleep 2; shot "$1-loaded"; fi
     if grep -q "^END" "$WORK/result.txt" 2>/dev/null; then break; fi
-    if [ ! -s "$WORK/result.txt" ] && [ "$i" -ge 2 ] && [ "$i" -le 5 ]; then dismiss; fi
-    if [ "$i" = 8 ] && [ ! -s "$WORK/result.txt" ]; then echo "no result after 40 s"; break; fi
+    if [ ! -s "$WORK/result.txt" ] && [ "$i" -ge 8 ] && [ "$i" -le 30 ] && [ $((i % 6)) = 2 ]; then dismiss; fi
+    if [ "$i" = 45 ] && [ ! -s "$WORK/result.txt" ]; then echo "no result after 45 s"; break; fi
     if ! kill -0 $PID 2>/dev/null; then echo "REAPER exited early"; break; fi
   done
   shot "$1-screen-final"
@@ -101,7 +114,7 @@ attempt() {   # attempt <label>
   [ -s "$WORK/result.txt" ]
 }
 
-if [ "$RUNNER_OS" = "Windows" ]; then VSTPATH='C:\\Program Files\\Common Files\\VST3'; else VSTPATH="$HOME/Library/Audio/Plug-Ins/VST3"; fi
+if [ "$RUNNER_OS" = "Windows" ]; then VSTPATH='C:\\Program Files\\Common Files\\VST3'; else VSTPATH="/Library/Audio/Plug-Ins/VST3;$HOME/Library/Audio/Plug-Ins/VST3"; fi
 set_ini
 if ! attempt portable; then
   echo "portable attempt gave no result, retrying as a normal install"
