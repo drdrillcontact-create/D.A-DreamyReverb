@@ -67,33 +67,39 @@ The preset number is saved with the project.
 Every push builds the plugin on Windows and macOS. Open the **Actions** tab, click the newest
 "Build D.A Dreamy Shimmer Reverb" run and download the artifacts at the bottom of the page:
 
-* `DreamyShimmerReverb-Windows-x64-VST3`
-* `DreamyShimmerReverb-macOS-AU-VST3`
+* `DreamyShimmerReverb-Windows-x64-VST3` - the VST3 folder and `INSTALL.txt`
+* `DreamyShimmerReverb-macOS-AU-VST3` - an installer package, `Manual-Install.zip` and `INSTALL.txt`
 
 The workflow also runs the self tests in `Tests/`, validates the VST3 with pluginval on both
-systems and validates the AU with Apple's `auval`.
+systems, installs the macOS package and validates the installed AU with Apple's `auval`.
 
 ## Install
 
-Version 1.0 was called "D.A Dreamy Reverb". This version has the same plugin ID, so old projects
-keep loading - but **delete the old `D.A Dreamy Reverb` files first**, otherwise the host finds the
-same plugin twice.
+`INSTALL.txt` inside each download has the full steps (English and Persian). In short:
 
 **Windows:** copy the folder `D.A Dreamy Shimmer Reverb.vst3` to `C:\Program Files\Common Files\VST3\`
+and rescan plugins in the DAW.
 
-**macOS:** unzip `DreamyShimmerReverb-macOS.zip`, then copy
+**macOS:** right-click `D.A Dreamy Shimmer Reverb Installer.pkg` and choose *Open*
+(macOS 15+: double-click, then *System Settings > Privacy & Security > Open Anyway*).
+It installs the AU and the VST3 into `/Library/Audio/Plug-Ins/`. The build is ad-hoc signed and not
+notarized, which is why macOS asks once. Files installed by the package are not quarantined.
 
-* `D.A Dreamy Shimmer Reverb.component` to `~/Library/Audio/Plug-Ins/Components/`
-* `D.A Dreamy Shimmer Reverb.vst3` to `~/Library/Audio/Plug-Ins/VST3/`
-
-The macOS build is only ad-hoc signed (not notarized), so remove the download quarantine once:
+For a manual install on macOS, copy the bundles from `Manual-Install.zip` to
+`~/Library/Audio/Plug-Ins/Components/` and `~/Library/Audio/Plug-Ins/VST3/` and remove the quarantine
+flag, otherwise macOS blocks the plugin in every DAW:
 
 ```
 xattr -cr ~/Library/Audio/Plug-Ins/Components/"D.A Dreamy Shimmer Reverb.component"
 xattr -cr ~/Library/Audio/Plug-Ins/VST3/"D.A Dreamy Shimmer Reverb.vst3"
 ```
 
-Then restart your DAW (Logic may need a rescan or a reboot to pick up the new AU).
+### Version 1.0 ("D.A Dreamy Reverb")
+
+D.A Dreamy Shimmer Reverb is a separate plugin with its own ID (AU `aufx Dshr Drma`). The old
+"D.A Dreamy Reverb" can stay installed: both show up in the DAW and old projects keep using the old
+plugin. (Build 1.1 of this plugin still used the ID of version 1.0. With both installed, hosts
+loaded only one of the two - delete build 1.1 if you installed it.)
 
 ## Build locally
 
@@ -119,6 +125,7 @@ Source/Presets.h               the 50 factory presets
 Source/PluginProcessor.*       parameters, presets, state, audio callback
 Source/PluginEditor.*          user interface
 Assets/Fonts/                  Jost typeface (SIL Open Font License, see OFL.txt)
+Packaging/                     install notes that ship with the downloads
 Tests/                         self tests
 Design/screenshot.png          screenshot of the plugin (rendered by the CI self test)
 .github/workflows/build.yml    CI for Windows and macOS

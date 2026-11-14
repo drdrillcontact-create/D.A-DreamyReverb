@@ -2,9 +2,6 @@ name: Build D.A Dreamy Shimmer Reverb
 
 on:
   push:
-    paths-ignore:
-      - 'Tests/daw/**'
-      - '.github/workflows/dawtest.yml'
   pull_request:
   workflow_dispatch:
 
