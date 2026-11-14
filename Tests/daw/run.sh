@@ -71,6 +71,16 @@ set_ini() {   # writes the VST search path into reaper.ini so REAPER does not as
   echo "--- reaper.ini after:"; cat "$ini" | head -20
 }
 
+dismiss() {   # answers "No" to the first-run question about the audio device
+  echo "dismissing first-run dialog"
+  if [ "$RUNNER_OS" = "Windows" ]; then
+    powershell -NoProfile -Command "\$w=New-Object -ComObject WScript.Shell; \$null=\$w.AppActivate('REAPER'); Start-Sleep -Milliseconds 500; \$w.SendKeys('n')" || true
+  else
+    osascript -e 'tell application "System Events" to tell process "REAPER" to click button "No" of window 1' 2>&1 || \
+    osascript -e 'tell application "System Events" to key code 53' 2>&1 || true
+  fi
+}
+
 attempt() {   # attempt <label>
   rm -f "$WORK/result.txt"
   echo "launching REAPER ($1), fx = $DAWTEST_FX"
@@ -80,7 +90,8 @@ attempt() {   # attempt <label>
     sleep 5
     if [ "$i" = 3 ] || [ "$i" = 6 ]; then shot "$1-screen-$i"; fi
     if grep -q "^END" "$WORK/result.txt" 2>/dev/null; then break; fi
-    if [ "$i" = 6 ] && [ ! -s "$WORK/result.txt" ]; then echo "no result after 30 s"; break; fi
+    if [ ! -s "$WORK/result.txt" ] && [ "$i" -ge 2 ] && [ "$i" -le 5 ]; then dismiss; fi
+    if [ "$i" = 8 ] && [ ! -s "$WORK/result.txt" ]; then echo "no result after 40 s"; break; fi
     if ! kill -0 $PID 2>/dev/null; then echo "REAPER exited early"; break; fi
   done
   shot "$1-screen-final"
