@@ -383,7 +383,10 @@ public:
 
         reset();
         snapSmoothers = true;
+        prepared = true;
     }
+
+    bool isPrepared() const noexcept { return prepared; }
 
     void reset()
     {
@@ -403,6 +406,13 @@ public:
     // In-place safe (inL may equal outL etc.)
     void process (const float* inL, const float* inR, float* outL, float* outR, int numSamples)
     {
+        // a host that processes before prepare() gets the dry signal instead of a crash
+        if (! prepared)
+        {
+            for (int n = 0; n < numSamples; ++n) { const float l = inL[n], r = inR[n]; outL[n] = l; outR[n] = r; }
+            return;
+        }
+
         const float fsr = (float) sr;
 
         // ---- per-block targets -------------------------------------------------
@@ -526,8 +536,11 @@ public:
                 wetFade = std::min (1.0f, wetFade + fadeStep);
             }
 
-            const float dryL = inL[n];
-            const float dryR = inR[n];
+            // hosts sometimes hand over uninitialised buffers: never let NaN / inf into the loops
+            float dryL = inL[n];
+            float dryR = inR[n];
+            if (! (std::fabs (dryL) < 1.0e4f)) dryL = 0.0f;
+            if (! (std::fabs (dryR) < 1.0e4f)) dryR = 0.0f;
             const float inGain = 1.0f - sFreeze;
 
             // pre-delay
@@ -678,6 +691,7 @@ private:
     float sLpCoef = 0.5f, sHpG = 0.01f, sLevelA = 1.0f, sLevelB = 0.0f;
     bool snapSmoothers = true;
 
+    bool prepared = false;
     std::atomic<bool> flushRequested { false };
     bool  flushing = false;
     float wetFade = 1.0f, fadeStep = 0.002f;

@@ -72,7 +72,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for f in dawtest.log dawtest/*.png; do
+          for f in dawtest.log dawtest/*final.png dawtest/portable-screen-3.png; do
             [ -f "$f" ] || continue
             base64 < "$f" | tr -d '\r\n' > blob.b64
             sha=$(gh api "repos/$GITHUB_REPOSITORY/git/blobs" -f encoding=base64 -F content=@blob.b64 --jq .sha) || sha="upload-failed"

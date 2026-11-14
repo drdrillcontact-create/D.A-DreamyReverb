@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <random>
+#include <limits>
 #include <vector>
 
 namespace
@@ -185,6 +186,24 @@ int main()
         p.freeze = false;
         const auto released = run (rv, p, sr, 256, 0.0, 8.0);
         check (released.tailRms < late.tailRms * 0.01, "releasing freeze lets the tail fade out");
+    }
+
+    // ---- hostile hosts: processing before prepare(), NaN / inf in the input ------------------------------
+    {
+        dreamy::Reverb rv;
+        float l[64], r[64];
+        for (int i = 0; i < 64; ++i) { l[i] = 0.25f; r[i] = -0.25f; }
+        rv.process (l, r, l, r, 64);
+        check (l[10] == 0.25f && r[10] == -0.25f, "processing before prepare() passes the dry signal through");
+
+        rv.prepare (48000.0);
+        dreamy::Reverb::Params p; p.mix = 1.0f; p.shimmer = 0.8f;
+        rv.setParams (p);
+        for (int i = 0; i < 64; ++i) { l[i] = std::numeric_limits<float>::quiet_NaN(); r[i] = std::numeric_limits<float>::infinity(); }
+        rv.process (l, r, l, r, 64);
+        const auto res = run (rv, p, 48000.0, 256, 0.5, 1.0);
+        std::snprintf (text, sizeof (text), "NaN / inf in the input does not poison the reverb (peak %.2f)", res.peak);
+        check (res.finite && res.peak > 0.01, text);
     }
 
     // ---- loading a preset empties the reverb without a click -----------------------------------------

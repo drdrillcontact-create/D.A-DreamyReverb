@@ -58,30 +58,61 @@ else
 fi
 
 export DAWTEST_FX="${DAWTEST_FX:-VST3:D.A Dreamy Shimmer Reverb}"
-echo "launching REAPER, fx = $DAWTEST_FX"
-"$REAPER" -nosplash -splashlog "$DAWTEST_DIR/splash.log" "$SCRIPT" > "$WORK/reaper-stdout.log" 2>&1 &
-PID=$!
 
-for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-  sleep 5
-  if [ "$i" = 2 ] || [ "$i" = 5 ] || [ "$i" = 8 ]; then shot "screen-$i"; fi
-  if grep -q "^END" "$WORK/result.txt" 2>/dev/null; then break; fi
-  if ! kill -0 $PID 2>/dev/null; then echo "REAPER exited early"; break; fi
-done
-shot "screen-final"
+set_ini() {   # writes the VST search path into reaper.ini so REAPER does not ask on first start
+  local ini="$RES/reaper.ini"
+  echo "--- reaper.ini before:"; cat "$ini" 2>/dev/null | head -20
+  local keys="vstpath=$VSTPATH\nvstpath64=$VSTPATH\nvstpath_arm64=$VSTPATH\nvstpath_x64=$VSTPATH"
+  if grep -qi "^\[reaper\]" "$ini" 2>/dev/null; then
+    awk -v k="$keys" 'BEGIN{gsub(/\\n/,"\n",k)} {print} tolower($0) ~ /^\[reaper\]/ {print k}' "$ini" > "$ini.new" && mv "$ini.new" "$ini"
+  else
+    printf "[REAPER]\n$keys\n" > "$ini"
+  fi
+  echo "--- reaper.ini after:"; cat "$ini" | head -20
+}
 
-if kill -0 $PID 2>/dev/null; then echo "REAPER still running: ok"; else echo "REAPER IS NOT RUNNING (crashed or quit)"; fi
-if [ "$RUNNER_OS" = "Windows" ]; then taskkill //F //IM reaper.exe > /dev/null 2>&1; else kill -9 $PID 2>/dev/null; fi
+attempt() {   # attempt <label>
+  rm -f "$WORK/result.txt"
+  echo "launching REAPER ($1), fx = $DAWTEST_FX"
+  "$REAPER" -nosplash -splashlog "$DAWTEST_DIR/splash-$1.log" "$SCRIPT" > "$WORK/reaper-stdout.log" 2>&1 &
+  PID=$!
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    sleep 5
+    if [ "$i" = 3 ] || [ "$i" = 6 ]; then shot "$1-screen-$i"; fi
+    if grep -q "^END" "$WORK/result.txt" 2>/dev/null; then break; fi
+    if [ "$i" = 6 ] && [ ! -s "$WORK/result.txt" ]; then echo "no result after 30 s"; break; fi
+    if ! kill -0 $PID 2>/dev/null; then echo "REAPER exited early"; break; fi
+  done
+  shot "$1-screen-final"
+  if kill -0 $PID 2>/dev/null; then echo "REAPER still running: ok"; else echo "REAPER IS NOT RUNNING (crashed or quit)"; fi
+  if [ "$RUNNER_OS" = "Windows" ]; then taskkill //F //IM reaper.exe > /dev/null 2>&1; else kill -9 $PID 2>/dev/null; fi
+  sleep 2
+  [ -s "$WORK/result.txt" ]
+}
+
+if [ "$RUNNER_OS" = "Windows" ]; then VSTPATH='C:\\Program Files\\Common Files\\VST3'; else VSTPATH="$HOME/Library/Audio/Plug-Ins/VST3"; fi
+set_ini
+if ! attempt portable; then
+  echo "portable attempt gave no result, retrying as a normal install"
+  if [ "$RUNNER_OS" = "Windows" ]; then
+    powershell -NoProfile -Command "Start-Process -Wait -FilePath .\\reaper-install.exe -ArgumentList '/S'"
+    REAPER="/c/Program Files/REAPER (x64)/reaper.exe"; RES="$APPDATA/REAPER"
+  else
+    rm -f "$HOME/reaper/reaper.ini"; RES="$HOME/Library/Application Support/REAPER"
+  fi
+  attempt normal
+fi
 
 echo "=========== result"
 cat "$WORK/result.txt" 2>/dev/null || echo "(no result file)"
 echo "=========== plugin scan files"
+ls "$RES" 2>/dev/null | tr '\n' ' '; echo
 for ini in "$RES"/reaper-vstplugins*.ini "$RES"/reaper-auplugins*.ini; do
   [ -f "$ini" ] || continue
   echo "--- $ini"; grep -i "dreamy" "$ini" || echo "(no entry)"
 done
 echo "=========== splash log"
-grep -i -B2 -A2 "dreamy" "$WORK/splash.log" 2>/dev/null | head -40
+cat "$WORK"/splash-*.log 2>/dev/null | grep -i -B1 -A1 "dreamy" | head -40
 echo "=========== stdout"
 tail -n 30 "$WORK/reaper-stdout.log" 2>/dev/null
 exit 0
