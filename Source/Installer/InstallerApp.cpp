@@ -121,7 +121,7 @@ namespace
         const juce::File zipFile = tempDir.getChildFile ("plugin.zip");
         {
             juce::FileOutputStream out (zipFile);
-            if (! out.opened() || ! out.write (bytes + zipStart, len - zipStart))
+            if (! out.openedOk() || ! out.write (bytes + zipStart, len - zipStart))
                 return juce::File();
         }
 
