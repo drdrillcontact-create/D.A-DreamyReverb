@@ -298,8 +298,7 @@ private:
 
     void quit()
     {
-        if (auto* tl = getTopLevelComponent())
-            tl->userTriedToCloseWindow();
+        juce::JUCEApplication::getInstance()->quit();
     }
 };
 
@@ -311,15 +310,16 @@ public:
                           juce::Colour (0xff141414),
                           juce::DocumentWindow::allButtons)
     {
+        setContentOwned (new InstallerComponent(), true);
         setResizable (true, true);
         setResizeLimits (720, 480, 1600, 1100);
-        centreOnScreen();
+        centreWithSize (760, 520);
         setVisible (true);
     }
 
-    void resized() override
+    void closeButtonPressed() override
     {
-        setContentComponent (new InstallerComponent());
+        juce::JUCEApplication::getInstance()->systemRequestedQuit();
     }
 };
 
@@ -331,24 +331,31 @@ public:
 
     const juce::String getApplicationName() override     { return "D.A AURA Installer"; }
     const juce::String getApplicationVersion() override { return "2.0.0"; }
-    void initialise (const juce::String& commandLine) override { (void) commandLine; }
-    void shutdown() override {}
-    void saveState (juce::MemoryOutputStream&) override {}
-    void restoreState (const juce::MemoryBlock&) override {}
+    bool moreThanOneInstanceAllowed() override          { return false; }
 
-    void createWindow (bool isStandalone) override
+    void initialise (const juce::String& commandLine) override
     {
-        (void) isStandalone;
+        juce::ignoreUnused (commandLine);
         window = std::make_unique<InstallerWindow>();
+    }
+
+    void shutdown() override
+    {
+        window = nullptr;
+    }
+
+    void systemRequestedQuit() override
+    {
+        quit();
+    }
+
+    void anotherInstanceStarted (const juce::String& commandLine) override
+    {
+        juce::ignoreUnused (commandLine);
     }
 
 private:
     std::unique_ptr<InstallerWindow> window;
 };
 
-int main (int argc, char* argv[])
-{
-    (void) argc;
-    (void) argv;
-    return DreamyInstallerApp::getInstance()->run();
-}
+START_JUCE_APPLICATION (DreamyInstallerApp)
