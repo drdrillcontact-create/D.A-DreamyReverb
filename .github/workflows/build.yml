@@ -144,7 +144,7 @@ jobs:
             --validate "$AU" 2>&1 | tee pluginval-au.log
 
           sleep 3
-          auval -v aufx Aura Drma 2>&1 | tee auval.log
+          auval -v aufx Aura Drma "$(pwd)/$AU" 2>&1 | tee auval.log
 
       # ---- report problems as annotations -------------------------------------
       - name: Report failures
