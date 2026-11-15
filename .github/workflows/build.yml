@@ -58,16 +58,38 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           set -e
-          # the installer executable, with the plugin bundle in a "plugins" folder
-          # right next to it (the installer reads exeDir/plugins)
+          # the installer executable and the VST3 bundle are both built already
           INSTALLER_EXE=$(find build -name "*AURA Installer*.exe" | head -n 1)
           test -n "$INSTALLER_EXE"
-          mkdir -p "package/D.A AURA Installer/plugins"
+          VST3=$(find build -path "*_artefacts*" -type d -name "*.vst3" | head -n 1)
+          test -n "$VST3"
+
+          # Embed the plugin inside the installer: zip the .vst3 bundle and
+          # append a marker + the zip to the end of the .exe, so the installer
+          # is fully self-contained and installs even when moved/extracted alone.
+          python3 - "$INSTALLER_EXE" "$VST3" <<'PY'
+          import sys, zipfile, shutil, os
+          exe, vst3 = sys.argv[1], sys.argv[2]
+          base = os.path.dirname(vst3)
+          zip_path = os.path.join(os.path.dirname(exe), "_plugin.zip")
+          with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+              for root, dirs, files in os.walk(vst3):
+                  for f in files:
+                      full = os.path.join(root, f)
+                      arc = os.path.relpath(full, base)
+                      z.write(full, arc)
+          marker = b"DAAURAINSTALLER_PLUGIN_ZIP_v1"
+          with open(exe, "ab") as out:
+              out.write(marker)
+              with open(zip_path, "rb") as zf:
+                  shutil.copyfileobj(zf, out)
+          print("embedded plugin zip into", exe)
+          PY
+
+          mkdir -p "package/D.A AURA Installer"
           cp "$INSTALLER_EXE" "package/D.A AURA Installer/D.A AURA Installer.exe"
           cp Packaging/INSTALL-Windows.txt "package/D.A AURA Installer/INSTALL.txt"
-          find build -path "*_artefacts*" -type d -name "*.vst3" -prune -exec cp -R {} "package/D.A AURA Installer/plugins/" \;
           ls -laR "package/D.A AURA Installer" | head -n 40
-          test -d "package/D.A AURA Installer/plugins/D.A AURA.vst3"
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
@@ -121,10 +143,12 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           set -o pipefail
+          VST3=$(find build -path "*_artefacts*" -type d -name "*.vst3" | head -n 1)
+          test -n "$VST3"
           curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip
           unzip -q -o pluginval.zip
           ./pluginval.exe --strictness-level 10 --validate-in-process --timeout-ms 900000 \
-            --validate "package/D.A AURA Installer/plugins/D.A AURA.vst3" 2>&1 | tee pluginval-vst3.log
+            --validate "$VST3" 2>&1 | tee pluginval-vst3.log
 
       - name: Validate AU and VST3 (macOS)
         if: runner.os == 'macOS'
