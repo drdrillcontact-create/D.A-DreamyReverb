@@ -40,7 +40,7 @@ namespace
                 return false;
 
             bool ok = true;
-            for (auto* f : src.findChildFiles (juce::File::findFilesAndDirectories, true))
+            for (const auto& f : src.findChildFiles (juce::File::findFilesAndDirectories, true))
                 ok = copyRecursive (f, dest.getChildFile (f.getFileName())) && ok;
             return ok;
         }
@@ -56,14 +56,14 @@ namespace
         if (! pluginsDir.isDirectory())
             return "Plugin files were not found next to the installer.";
 
-        bool macPlugInsRoot = (JUCE_MAC || JUCE_IOS)
+        bool macPlugInsRoot = JUCE_MAC
                               && target.getFullPathName().contains ("Plug-Ins");
 
         if (! target.exists() && ! target.createDirectory())
             return "Could not create the install folder.";
 
         int copied = 0;
-        for (auto* f : pluginsDir.findChildFiles (juce::File::findFilesAndDirectories, true))
+        for (const auto& f : pluginsDir.findChildFiles (juce::File::findFilesAndDirectories, true))
         {
             juce::File dest = target;
 
@@ -97,35 +97,35 @@ public:
         bg = loadWelcomeImage();
 
         nextBtn.setButtonText ("Next");
-        nextBtn.setColour (juce::Button::buttonOnColourId,   juce::Colour (0xffd7050c));
-        nextBtn.setColour (juce::Button::buttonOffColourId,  juce::Colour (0xff8a0306));
-        nextBtn.setColour (juce::Button::textColourId,       juce::Colours::white);
-        nextBtn.setColour (juce::Button::textColourOnColourId, juce::Colours::white);
+        nextBtn.setColour (juce::TextButton::buttonOnColourId,   juce::Colour (0xffd7050c));
+        nextBtn.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff8a0306));
+        nextBtn.setColour (juce::TextButton::textColourOffId,       juce::Colours::white);
+        nextBtn.setColour (juce::TextButton::textColourOnId, juce::Colours::white);
         addAndMakeVisible (nextBtn);
 
         cancelBtn.setButtonText ("Cancel");
-        cancelBtn.setColour (juce::Button::buttonOnColourId,   juce::Colour (0xff3a3a3a));
-        cancelBtn.setColour (juce::Button::buttonOffColourId,  juce::Colour (0xff222222));
-        cancelBtn.setColour (juce::Button::textColourId,       juce::Colours::white);
-        cancelBtn.setColour (juce::Button::textColourOnColourId, juce::Colours::white);
+        cancelBtn.setColour (juce::TextButton::buttonOnColourId,   juce::Colour (0xff3a3a3a));
+        cancelBtn.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff222222));
+        cancelBtn.setColour (juce::TextButton::textColourOffId,       juce::Colours::white);
+        cancelBtn.setColour (juce::TextButton::textColourOnId, juce::Colours::white);
         addAndMakeVisible (cancelBtn);
 
         backBtn.setButtonText ("Back");
-        backBtn.setColour (juce::Button::buttonOffColourId,   cancelBtn.getColour (juce::Button::buttonOffColourId));
-        backBtn.setColour (juce::Button::buttonOnColourId,    cancelBtn.getColour (juce::Button::buttonOnColourId));
-        backBtn.setColour (juce::Button::textColourId,        juce::Colours::white);
+        backBtn.setColour (juce::TextButton::buttonColourId,   cancelBtn.getColour (juce::TextButton::buttonColourId));
+        backBtn.setColour (juce::TextButton::buttonOnColourId,    cancelBtn.getColour (juce::TextButton::buttonOnColourId));
+        backBtn.setColour (juce::TextButton::textColourOffId,        juce::Colours::white);
         addAndMakeVisible (backBtn);
 
         installBtn.setButtonText ("Next");
-        installBtn.setColour (juce::Button::buttonOffColourId, nextBtn.getColour (juce::Button::buttonOffColourId));
-        installBtn.setColour (juce::Button::buttonOnColourId,  nextBtn.getColour (juce::Button::buttonOnColourId));
-        installBtn.setColour (juce::Button::textColourId,      juce::Colours::white);
+        installBtn.setColour (juce::TextButton::buttonColourId, nextBtn.getColour (juce::TextButton::buttonColourId));
+        installBtn.setColour (juce::TextButton::buttonOnColourId,  nextBtn.getColour (juce::TextButton::buttonOnColourId));
+        installBtn.setColour (juce::TextButton::textColourOffId,      juce::Colours::white);
         addAndMakeVisible (installBtn);
 
         finishBtn.setButtonText ("Finish");
-        finishBtn.setColour (juce::Button::buttonOffColourId, nextBtn.getColour (juce::Button::buttonOffColourId));
-        finishBtn.setColour (juce::Button::buttonOnColourId,  nextBtn.getColour (juce::Button::buttonOnColourId));
-        finishBtn.setColour (juce::Button::textColourId,      juce::Colours::white);
+        finishBtn.setColour (juce::TextButton::buttonColourId, nextBtn.getColour (juce::TextButton::buttonColourId));
+        finishBtn.setColour (juce::TextButton::buttonOnColourId,  nextBtn.getColour (juce::TextButton::buttonOnColourId));
+        finishBtn.setColour (juce::TextButton::textColourOffId,      juce::Colours::white);
         addAndMakeVisible (finishBtn);
 
         pathEdit.setMultiLine (false);
