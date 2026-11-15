@@ -15,8 +15,7 @@
 // built application (the workflow places them there before packaging) and are
 // copied into the chosen install folder.
 
-#include <juce_core/juce_core.h>
-#include <juce_gui/juce_gui.h>
+#include <JuceHeader.h>
 #include <memory>
 
 namespace
