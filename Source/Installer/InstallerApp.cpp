@@ -56,8 +56,11 @@ namespace
         if (! pluginsDir.isDirectory())
             return "Plugin files were not found next to the installer.";
 
-        bool macPlugInsRoot = JUCE_MAC
-                              && target.getFullPathName().contains ("Plug-Ins");
+#if JUCE_MAC || JUCE_IOS
+        const bool macPlugInsRoot = target.getFullPathName().contains ("Plug-Ins");
+#else
+        const bool macPlugInsRoot = false;
+#endif
 
         if (! target.exists() && ! target.createDirectory())
             return "Could not create the install folder.";
@@ -111,25 +114,24 @@ public:
         addAndMakeVisible (cancelBtn);
 
         backBtn.setButtonText ("Back");
-        backBtn.setColour (juce::TextButton::buttonColourId,   cancelBtn.getColour (juce::TextButton::buttonColourId));
-        backBtn.setColour (juce::TextButton::buttonOnColourId,    cancelBtn.getColour (juce::TextButton::buttonOnColourId));
-        backBtn.setColour (juce::TextButton::textColourOffId,        juce::Colours::white);
+        backBtn.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff222222));
+        backBtn.setColour (juce::TextButton::buttonOnColourId,  juce::Colour (0xff3a3a3a));
+        backBtn.setColour (juce::TextButton::textColourOffId,   juce::Colours::white);
         addAndMakeVisible (backBtn);
 
         installBtn.setButtonText ("Next");
-        installBtn.setColour (juce::TextButton::buttonColourId, nextBtn.getColour (juce::TextButton::buttonColourId));
-        installBtn.setColour (juce::TextButton::buttonOnColourId,  nextBtn.getColour (juce::TextButton::buttonOnColourId));
-        installBtn.setColour (juce::TextButton::textColourOffId,      juce::Colours::white);
+        installBtn.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff8a0306));
+        installBtn.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffd7050c));
+        installBtn.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
         addAndMakeVisible (installBtn);
 
         finishBtn.setButtonText ("Finish");
-        finishBtn.setColour (juce::TextButton::buttonColourId, nextBtn.getColour (juce::TextButton::buttonColourId));
-        finishBtn.setColour (juce::TextButton::buttonOnColourId,  nextBtn.getColour (juce::TextButton::buttonOnColourId));
-        finishBtn.setColour (juce::TextButton::textColourOffId,      juce::Colours::white);
+        finishBtn.setColour (juce::TextButton::buttonColourId,  juce::Colour (0xff8a0306));
+        finishBtn.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xffd7050c));
+        finishBtn.setColour (juce::TextButton::textColourOffId, juce::Colours::white);
         addAndMakeVisible (finishBtn);
 
         pathEdit.setMultiLine (false);
-        pathEdit.setCaretColour (juce::Colours::white);
         pathEdit.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xff141414));
         pathEdit.setColour (juce::TextEditor::textColourId, juce::Colours::white);
         pathEdit.setColour (juce::TextEditor::outlineColourId, juce::Colour (0xff444444));
@@ -142,12 +144,12 @@ public:
 
         status.setJustificationType (juce::Justification::centred);
         status.setColour (juce::Label::textColourId, juce::Colours::white);
-        status.setFont (juce::Font (juce::Font::getDefaultSansSerifFontStyle().withPointHeight (14.0f).withBold (true)));
+        status.setFont (juce::Font (14.0f, juce::Font::bold));
         addAndMakeVisible (status);
 
         title.setJustificationType (juce::Justification::centred);
         title.setColour (juce::Label::textColourId, juce::Colours::white);
-        title.setFont (juce::Font (juce::Font::getDefaultSansSerifFontStyle().withPointHeight (22.0f).withBold (true)));
+        title.setFont (juce::Font (22.0f, juce::Font::bold));
         addAndMakeVisible (title);
 
         nextBtn.onClick = [this] { onNext(); };
