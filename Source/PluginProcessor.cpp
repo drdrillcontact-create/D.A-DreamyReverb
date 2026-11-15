@@ -50,6 +50,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout DreamyReverbAudioProcessor::
     layout.add (percentParam ("width",    "Width",     1.5f, 1.0f));
     layout.add (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { "freeze", 1 }, "Freeze", false));
 
+    // added in version 1.1 (higher version hint, so the AU parameter order of 1.0 stays valid)
+    juce::StringArray intervals;
+    for (auto* name : dreamy::shimmerIntervalNames)
+        intervals.add (name);
+    layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "shimmode", 2 }, "Shimmer Interval", intervals, 0));
+
     return layout;
 }
 
@@ -70,12 +76,19 @@ DreamyReverbAudioProcessor::DreamyReverbAudioProcessor()
     pShimmer  = apvts.getRawParameterValue ("shimmer");
     pWidth    = apvts.getRawParameterValue ("width");
     pFreeze   = apvts.getRawParameterValue ("freeze");
+    pInterval = apvts.getRawParameterValue ("shimmode");
 }
 
 void DreamyReverbAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     reverb.prepare (sampleRate);
     scratch.setSize (2, juce::jmax (1, samplesPerBlock), false, true, false);
+}
+
+double DreamyReverbAudioProcessor::getTailLengthSeconds() const
+{
+    // decay time plus room for the pre-delay and the shimmer bloom
+    return (double) pDecay->load() * 1.5 + 1.0;
 }
 
 void DreamyReverbAudioProcessor::reset()
@@ -88,10 +101,11 @@ bool DreamyReverbAudioProcessor::isBusesLayoutSupported (const BusesLayout& layo
     const auto in  = layouts.getMainInputChannelSet();
     const auto out = layouts.getMainOutputChannelSet();
 
-    if (out != juce::AudioChannelSet::stereo())
-        return false;
+    // stereo -> stereo, mono -> stereo and mono -> mono
+    if (out == juce::AudioChannelSet::stereo())
+        return in == juce::AudioChannelSet::mono() || in == juce::AudioChannelSet::stereo();
 
-    return in == juce::AudioChannelSet::mono() || in == juce::AudioChannelSet::stereo();
+    return out == juce::AudioChannelSet::mono() && in == juce::AudioChannelSet::mono();
 }
 
 void DreamyReverbAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -117,6 +131,7 @@ void DreamyReverbAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     p.shimmer  = pShimmer->load();
     p.width    = pWidth->load();
     p.freeze   = pFreeze->load() > 0.5f;
+    p.shimmerMode = juce::roundToInt (pInterval->load());
     reverb.setParams (p);
 
     if (numChannels >= 2)
@@ -134,9 +149,9 @@ void DreamyReverbAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }
     else
     {
-        // Fallback for hosts that hand us a single channel
+        // mono -> mono: run the stereo reverb and fold the result down
         if (scratch.getNumSamples() < numSamples)
-            scratch.setSize (2, numSamples, false, true, true);
+            scratch.setSize (2, numSamples, false, false, true);
 
         auto* m  = buffer.getWritePointer (0);
         auto* sl = scratch.getWritePointer (0);
@@ -153,17 +168,105 @@ juce::AudioProcessorEditor* DreamyReverbAudioProcessor::createEditor()
     return new DreamyReverbAudioProcessorEditor (*this);
 }
 
+//==============================================================================
+juce::String DreamyReverbAudioProcessor::getPresetName (int index)
+{
+    return juce::isPositiveAndBelow (index, dreamy::numPresets) ? juce::String (dreamy::factoryPresets[index].name)
+                                                                : juce::String();
+}
+
+juce::String DreamyReverbAudioProcessor::getPresetCategory (int index)
+{
+    return juce::isPositiveAndBelow (index, dreamy::numPresets) ? juce::String (dreamy::factoryPresets[index].category)
+                                                                : juce::String();
+}
+
+void DreamyReverbAudioProcessor::applyPresetValue (const char* paramId, float value)
+{
+    if (auto* param = apvts.getParameter (paramId))
+    {
+        const float normalised = param->convertTo0to1 (value);
+
+        if (std::abs (param->getValue() - normalised) > 1.0e-6f)
+        {
+            param->beginChangeGesture();
+            param->setValueNotifyingHost (normalised);
+            param->endChangeGesture();
+        }
+    }
+}
+
+bool DreamyReverbAudioProcessor::parameterMatches (const char* paramId, float value) const
+{
+    if (auto* param = apvts.getParameter (paramId))
+        return std::abs (param->getValue() - param->convertTo0to1 (value)) < 0.002f;
+
+    return true;
+}
+
+void DreamyReverbAudioProcessor::loadPreset (int index)
+{
+    index = juce::jlimit (0, dreamy::numPresets - 1, index);
+    const auto& preset = dreamy::factoryPresets[index];
+
+    applyPresetValue ("mix",      preset.mix);
+    applyPresetValue ("size",     preset.size);
+    applyPresetValue ("decay",    preset.decay);
+    applyPresetValue ("predelay", preset.preDelay);
+    applyPresetValue ("highcut",  preset.highCut);
+    applyPresetValue ("lowcut",   preset.lowCut);
+    applyPresetValue ("moddepth", preset.modDepth);
+    applyPresetValue ("modrate",  preset.modRate);
+    applyPresetValue ("shimmer",  preset.shimmer);
+    applyPresetValue ("width",    preset.width);
+    applyPresetValue ("shimmode", (float) preset.interval);
+    applyPresetValue ("freeze",   0.0f);
+
+    currentPreset.store (index);
+    apvts.state.setProperty ("presetIndex", index, nullptr);
+
+    // start the new preset with an empty reverb (short fade, no pitch glide of the old tail)
+    reverb.flush();
+}
+
+bool DreamyReverbAudioProcessor::isPresetModified() const
+{
+    const auto& preset = dreamy::factoryPresets[juce::jlimit (0, dreamy::numPresets - 1, currentPreset.load())];
+
+    return ! (parameterMatches ("mix",      preset.mix)
+           && parameterMatches ("size",     preset.size)
+           && parameterMatches ("decay",    preset.decay)
+           && parameterMatches ("predelay", preset.preDelay)
+           && parameterMatches ("highcut",  preset.highCut)
+           && parameterMatches ("lowcut",   preset.lowCut)
+           && parameterMatches ("moddepth", preset.modDepth)
+           && parameterMatches ("modrate",  preset.modRate)
+           && parameterMatches ("shimmer",  preset.shimmer)
+           && parameterMatches ("width",    preset.width)
+           && parameterMatches ("shimmode", (float) preset.interval));
+}
+
+//==============================================================================
 void DreamyReverbAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    state.setProperty ("presetIndex", currentPreset.load(), nullptr);
+
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
 
 void DreamyReverbAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
+    {
         if (xml->hasTagName (apvts.state.getType()))
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+        {
+            auto state = juce::ValueTree::fromXml (*xml);
+            currentPreset.store (juce::jlimit (0, dreamy::numPresets - 1, (int) state.getProperty ("presetIndex", 0)));
+            apvts.replaceState (state);
+        }
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

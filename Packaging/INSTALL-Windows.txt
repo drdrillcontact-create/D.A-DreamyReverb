@@ -1,0 +1,66 @@
+D.A AURA 2.0 - Windows (VST3, 64-bit)
+=========================================================
+
+Recommended: the installer
+---------------------------
+1. Close your DAW.
+2. Unzip the download and run
+
+       "D.A AURA Installer.exe"
+
+3. On the first screen click Next, then Next again. The install folder is
+   pre-selected and checked:
+
+       C:\Program Files\Common Files\VST3
+
+4. The plugin is copied there. Click Finish.
+5. Start the DAW and rescan plugins. The plugin is listed as
+   "D.A AURA", manufacturer "D.A".
+
+FL Studio:   Options > Manage plugins > Find installed plugins
+Ableton:     Preferences > Plug-Ins > turn on "Use VST3 Plug-In System Folders" > Rescan
+Cubase:      Studio > VST Plug-in Manager > Rescan
+
+Manual install (instead of the installer)
+-----------------------------------------
+Copy the whole folder
+
+       D.A AURA.vst3
+
+into
+
+       C:\Program Files\Common Files\VST3\
+
+(Copy the folder itself, with everything inside it.)
+
+Notes
+-----
+- This is a 64-bit VST3. It does not load in 32-bit hosts or as VST2.
+- Older D.A plugins (D.A Dreamy Reverb 1.0, D.A Dreamy Shimmer Reverb 1.2) can
+  stay installed; each has its own id, so they load side by side.
+- If Windows blocked the download: right-click the downloaded .zip >
+  Properties > tick "Unblock" > OK, then extract it again.
+
+--------------------------------------------------------------------------
+
+نصب در ویندوز
+
+روش پیشنهادی: نصب‌کننده
+۱. DAW را ببندید.
+۲. دانلوده را unzip کنید و  D.A AURA Installer.exe  را اجرا کنید.
+۳. در صفحهٔ اول Next را بزنید، سپس دوباره Next. مسیر نصب به‌صورت پیش‌تنظیم و تیک‌دار است:
+       C:\Program Files\Common Files\VST3
+۴. پلاگین در این مسیر کپی می‌شود. دکمهٔ Finish را بزنید.
+۵. DAW را باز کنید و پلاگین‌ها را دوباره اسکن کنید. نام پلاگین در لیست:
+   D.A AURA  (سازنده: D.A)
+
+نصب دستی
+کل پوشهٔ  D.A AURA.vst3  را (خودِ پوشه با همهٔ محتویاتش) در این مسیر کپی کنید:
+       C:\Program Files\Common Files\VST3\
+
+نکته‌ها
+- این پلاگین VST3 شصت‌وچهار بیتی است؛ در هاست ۳۲ بیتی یا به‌صورت VST2 لود نمی‌شود.
+- پلاگین‌های قدیمی D.A (D.A Dreamy Reverb 1.0 و D.A Dreamy Shimmer Reverb 1.2) می‌توانند نصب بماند؛
+  هر کدام شناسه‌ی خودشان را دارند و کنار هم لود می‌شوند.
+- اگر ویندوز فایل دانلودشده را بلاک کرده: روی فایل zip راست‌کلیک > Properties > تیک Unblock > OK
+  و دوباره Extract کنید.

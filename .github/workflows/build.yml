@@ -1,61 +1,158 @@
-name: Build D.A Dreamy Reverb
+name: Build D.A AURA
 
 on:
   push:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Windows x64 (VST3)
+          - name: Windows x64 (VST3 + Installer)
             os: windows-latest
-            artifact: DreamyReverb-Windows-x64-VST3
-            configure: cmake -B build -A x64
-          - name: macOS Universal (AU + VST3)
+            artifact: DA-AURA-Windows-x64
+            configure: cmake -B build -A x64 -DDREAMY_BUILD_TESTS=ON
+            tests: build/Release
+          - name: macOS Universal (AU + VST3 + Installer)
             os: macos-latest
-            artifact: DreamyReverb-macOS-AU-VST3
-            configure: cmake -B build -DCMAKE_BUILD_TYPE=Release
+            artifact: DA-AURA-macOS-Universal
+            configure: cmake -B build -DCMAKE_BUILD_TYPE=Release -DDREAMY_BUILD_TESTS=ON
+            tests: build
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configure
         run: ${{ matrix.configure }}
 
       - name: Build
-        run: cmake --build build --config Release --parallel 4
-
-      - name: Collect plugins (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
         run: |
-          mkdir -p package
-          find build -path "*_artefacts*" -type d -name "*.vst3" -prune -exec cp -R {} package/ \;
-          ls -la package
-          test -n "$(ls -A package)"
+          set -o pipefail
+          cmake --build build --config Release --parallel 4 2>&1 | tee build.log
 
-      - name: Collect plugins (macOS)
+      # ---- self tests ------------------------------------------------------
+      - name: DSP self test
+        run: |
+          set -o pipefail
+          "${{ matrix.tests }}/DreamyDspTest" 2>&1 | tee dsp-test.log
+
+      - name: Plugin self test (parameters, presets, state, audio, editor)
+        run: |
+          set -o pipefail
+          "${{ matrix.tests }}/DreamyPluginTest" snapshots 2>&1 | tee plugin-test.log
+
+      # ---- package the plugin and the installer ------------------------------
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          set -e
+          # the installer executable, with the plugin bundle in a "plugins" folder
+          # right next to it (the installer reads exeDir/plugins)
+          INSTALLER_EXE=$(find build -name "DreamyInstaller.exe" | head -n 1)
+          test -n "$INSTALLER_EXE"
+          mkdir -p "package/D.A AURA Installer/plugins"
+          cp "$INSTALLER_EXE" "package/D.A AURA Installer/D.A AURA Installer.exe"
+          cp Packaging/INSTALL-Windows.txt "package/D.A AURA Installer/INSTALL.txt"
+          find build -path "*_artefacts*" -type d -name "*.vst3" -prune -exec cp -R {} "package/D.A AURA Installer/plugins/" \;
+          ls -laR "package/D.A AURA Installer" | head -n 40
+          test -d "package/D.A AURA Installer/plugins/D.A AURA.vst3"
+
+      - name: Package (macOS)
         if: runner.os == 'macOS'
         run: |
+          set -e
           mkdir -p staging package
           find build -path "*_artefacts*" -type d \( -name "*.vst3" -o -name "*.component" \) -prune -exec cp -R {} staging/ \;
           ls -la staging
-          test -n "$(ls -A staging)"
+          test -d "staging/D.A AURA.component"
+          test -d "staging/D.A AURA.vst3"
+          lipo -archs "staging/D.A AURA.component/Contents/MacOS/D.A AURA"
           # ad-hoc sign so the bundles load on Apple Silicon
-          for b in staging/*; do codesign --force --deep --sign - "$b"; done
-          # zip here so bundle permissions survive the artifact upload
-          ditto -c -k staging "package/DreamyReverb-macOS.zip"
+          for b in staging/*; do codesign --force --deep --sign - "$b"; codesign --verify --deep --strict "$b"; done
 
-      - name: Upload
-        uses: actions/upload-artifact@v4
+          # the installer .app bundle
+          INSTALLER_APP=$(find build -name "*.app" -path "*DreamyInstaller*" | head -n 1)
+          test -n "$INSTALLER_APP"
+          # put the plugin bundles inside the app (Contents/plugins) so the
+          # installer finds them via currentExecutableDirectory/plugins
+          cp -R staging/* "$INSTALLER_APP/Contents/plugins/"
+          cp Packaging/INSTALL-macOS.txt "$INSTALLER_APP/Contents/Resources/INSTALL.txt"
+
+          # ad-hoc sign the app
+          codesign --force --deep --sign - "$INSTALLER_APP"
+          codesign --verify --deep --strict "$INSTALLER_APP"
+
+          mkdir -p "package/D.A AURA Installer"
+          cp -R "$INSTALLER_APP" "package/D.A AURA Installer/D.A AURA Installer.app"
+
+          # the bundles as well, for a manual install
+          ditto -c -k staging "package/Manual-Install.zip"
+          ls -la package "package/D.A AURA Installer"
+
+      - name: Upload plugins and installer
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: package
           if-no-files-found: error
+
+      - name: Upload editor snapshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: editor-snapshots-${{ runner.os }}
+          path: snapshots
+          if-no-files-found: warn
+
+      # ---- validation in a plugin host ----------------------------------------
+      - name: Validate VST3 with pluginval (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          set -o pipefail
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip
+          unzip -q -o pluginval.zip
+          ./pluginval.exe --strictness-level 10 --validate-in-process --timeout-ms 900000 \
+            --validate "package/D.A AURA Installer/plugins/D.A AURA.vst3" 2>&1 | tee pluginval-vst3.log
+
+      - name: Validate AU and VST3 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -o pipefail
+          APP="package/D.A AURA Installer/D.A AURA Installer.app"
+          VST3="$APP/Contents/plugins/D.A AURA.vst3"
+          AU="$APP/Contents/plugins/D.A AURA.component"
+          test -d "$VST3"
+          test -d "$AU"
+
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
+          unzip -q -o pluginval.zip
+          pluginval.app/Contents/MacOS/pluginval --strictness-level 10 --validate-in-process --timeout-ms 900000 \
+            --validate "$VST3" 2>&1 | tee pluginval-vst3.log
+          pluginval.app/Contents/MacOS/pluginval --strictness-level 10 --validate-in-process --timeout-ms 900000 \
+            --validate "$AU" 2>&1 | tee pluginval-au.log
+
+          sleep 3
+          auval -v aufx Aura Drma 2>&1 | tee auval.log
+
+      # ---- report problems as annotations -------------------------------------
+      - name: Report failures
+        if: failure()
+        run: |
+          for f in build.log dsp-test.log plugin-test.log pluginval-vst3.log auval.log pluginval-au.log; do
+            [ -f "$f" ] || continue
+            grep -n -i -E "error|FAIL|!!!|assert" "$f" | grep -v -i "warning" | head -n 8 | while IFS= read -r line; do
+              echo "::error title=$f::${line:0:900}"
+            done
+          done
+          exit 0

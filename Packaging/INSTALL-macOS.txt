@@ -1,0 +1,72 @@
+D.A AURA 2.0 - macOS (AU + VST3, Apple Silicon and Intel)
+================================================================
+
+Recommended: the installer app
+------------------------------
+1. Close your DAW.
+2. Unzip the download. You get the installer app:
+
+       "D.A AURA Installer.app"
+
+3. Because the app is not notarized by Apple, macOS asks once. Right-click
+   (or Control-click) the .app and choose Open, then click Open again.
+   On macOS 15 or newer: double-click it once, then open
+   System Settings > Privacy & Security, scroll down and click "Open Anyway".
+4. In the installer click Next, then Next again. The install folder is
+   pre-selected and checked:
+
+       /Library/Audio/Plug-Ins
+
+   The app puts the Audio Unit into Components/ and the VST3 into VST3/:
+       /Library/Audio/Plug-Ins/Components   (AU: Logic, GarageBand, ...)
+       /Library/Audio/Plug-Ins/VST3         (VST3: Ableton, Cubase, FL Studio, ...)
+5. Click Finish.
+6. Start the DAW. The plugin is listed as "D.A AURA", manufacturer "D.A".
+   In Logic it is under Audio Units > D.A.
+
+Manual install (instead of the installer)
+-----------------------------------------
+Unzip Manual-Install.zip and copy
+    D.A AURA.component  ->  ~/Library/Audio/Plug-Ins/Components/
+    D.A AURA.vst3       ->  ~/Library/Audio/Plug-Ins/VST3/
+Then open Terminal and run these two lines. Without them macOS blocks the
+plugin and no DAW can load it:
+
+    xattr -cr ~/Library/Audio/Plug-Ins/Components/"D.A AURA.component"
+    xattr -cr ~/Library/Audio/Plug-Ins/VST3/"D.A AURA.vst3"
+
+Notes
+-----
+- Older D.A plugins (D.A Dreamy Reverb 1.0, D.A Dreamy Shimmer Reverb 1.2)
+  can stay installed; each has its own id, so they load side by side.
+- If Logic does not show the plugin, restart the Mac once (this refreshes the
+  Audio Unit cache).
+
+--------------------------------------------------------------------------
+
+نصب در مک
+
+روش پیشنهادی: نصب‌کننده
+۱. DAW را ببندید.
+۲. دانلوده را unzip کنید. نصب‌کننده این است:
+       D.A AURA Installer.app
+۳. از آن‌جایی که این اپ notarize نشده، macOS یک بار می‌پرسد. روی فایل .app راست‌کلیک
+   (یا Control-کلیک) کنید و Open را بزنید، سپس دوباره Open.
+   در macOS 15 به بالا: یک بار دابل‌کلیک کنید، بعد System Settings > Privacy & Security
+   بروید و پایین صفحه Open Anyway را بزنید.
+۴. در اینستالر Next را بزنید، سپس دوباره Next. مسیر نصب پیش‌تنظیم و تیک‌دار است:
+       /Library/Audio/Plug-Ins
+   اینستالر AU را در Components/ و VST3 را در VST3/ می‌گذارد:
+       /Library/Audio/Plug-Ins/Components   (AU برای Logic و GarageBand)
+       /Library/Audio/Plug-Ins/VST3         (VST3 برای Ableton، Cubase، FL Studio)
+۵. Finish را بزنید.
+۶. DAW را باز کنید. نام پلاگین: D.A AURA (سازنده: D.A). در Logic زیر Audio Units > D.A است.
+
+نصب دستی
+فایل Manual-Install.zip را باز کنید، دو فایل را در مسیرهای بالا کپی کنید
+و حتماً دو دستور xattr بالا را در Terminal اجرا کنید؛ بدون آن‌ها macOS پلاگین را بلاک می‌کند
+و در هیچ DAW ای لود نمی‌شود.
+
+نکته‌ها
+- پلاگین‌های قدیمی D.A می‌توانند نصب بماند؛ هر کدام شناسه‌ی خودشان را دارند و کنار هم لود می‌شوند.
+- اگر Logic پلاگین را نشان نداد، یک بار مک را ری‌استارت کنید.
