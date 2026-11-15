@@ -184,14 +184,14 @@ public:
         {
             const auto cx = area.getCentreX();
             const int fieldW = 560, fieldH = 34;
-            pathEdit.setBounds (cx - fieldW / 2, area.y + 200, fieldW, fieldH);
-            check.setBounds     (cx - fieldW / 2, area.y + 248, 260, 24);
-            title.setBounds     (area.x, area.y + 70, area.getWidth(), 34);
-            status.setBounds    (area.x, area.y + 300, area.getWidth(), 28);
+            pathEdit.setBounds (cx - fieldW / 2, area.getY() + 200, fieldW, fieldH);
+            check.setBounds     (cx - fieldW / 2, area.getY() + 248, 260, 24);
+            title.setBounds     (area.getX(), area.getY() + 70, area.getWidth(), 34);
+            status.setBounds    (area.getX(), area.getY() + 300, area.getWidth(), 28);
 
             const int bw = 140, bh = 40;
-            backBtn.setBounds   (cx - bw - 20, area.y + area.getHeight() - 90, bw, bh);
-            installBtn.setBounds(cx + 20,           area.y + area.getHeight() - 90, bw, bh);
+            backBtn.setBounds   (cx - bw - 20, area.getY() + area.getHeight() - 90, bw, bh);
+            installBtn.setBounds(cx + 20,           area.getY() + area.getHeight() - 90, bw, bh);
 
             nextBtn.setVisible (false);
             cancelBtn.setVisible (false);
@@ -200,9 +200,9 @@ public:
         else // Done
         {
             const auto cx = area.getCentreX();
-            title.setBounds     (area.x, area.y + 70, area.getWidth(), 34);
-            status.setBounds    (area.x, area.y + 140, area.getWidth(), 40);
-            finishBtn.setBounds (cx - 75, area.y + area.getHeight() - 110, 150, 44);
+            title.setBounds     (area.getX(), area.getY() + 70, area.getWidth(), 34);
+            status.setBounds    (area.getX(), area.getY() + 140, area.getWidth(), 40);
+            finishBtn.setBounds (cx - 75, area.getY() + area.getHeight() - 110, 150, 44);
 
             nextBtn.setVisible (false);
             cancelBtn.setVisible (false);
