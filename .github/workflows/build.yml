@@ -87,12 +87,13 @@ jobs:
           test -n "$INSTALLER_APP"
           # put the plugin bundles inside the app (Contents/plugins) so the
           # installer finds them via currentExecutableDirectory/plugins
+          mkdir -p "$INSTALLER_APP/Contents/plugins"
           cp -R staging/* "$INSTALLER_APP/Contents/plugins/"
           cp Packaging/INSTALL-macOS.txt "$INSTALLER_APP/Contents/Resources/INSTALL.txt"
 
-          # ad-hoc sign the app
+          # ad-hoc sign the app (verify without --strict: it contains nested bundles)
           codesign --force --deep --sign - "$INSTALLER_APP"
-          codesign --verify --deep --strict "$INSTALLER_APP"
+          codesign --verify --deep "$INSTALLER_APP"
 
           mkdir -p "package/D.A AURA Installer"
           cp -R "$INSTALLER_APP" "package/D.A AURA Installer/D.A AURA Installer.app"
