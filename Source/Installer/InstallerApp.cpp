@@ -255,7 +255,7 @@ private:
         if (bg.isValid())
         {
             g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-            g.drawImage (bg, coverRect (area, bg));
+            g.drawImage (bg, coverRect (area, bg).toFloat());
         }
     }
 
@@ -282,7 +282,7 @@ private:
     void doInstall()
     {
         const juce::File target (pathEdit.getText().isNotEmpty() ? pathEdit.getText() : DREAMY_INSTALLER_DEFAULT_DIR);
-        const juce::File exeDir = juce::File::getSpecialLocation (juce::File::specialLocationType::currentExecutableDirectory);
+        const juce::File exeDir = juce::File::getSpecialLocation (juce::File::SpecialLocationType::currentExecutableFile).getParentDirectory();
         const juce::File pluginsDir = exeDir.getChildFile ("plugins");
 
         const juce::String err = installPlugins (pluginsDir, target);
@@ -298,10 +298,8 @@ private:
 
     void quit()
     {
-        juce::DialogWindow::ExitCallbackInfo cbi;
-        cbi.window = getTopLevelWindow();
-        if (cbi.window != nullptr)
-            cbi.window->closeWindow();
+        if (auto* tl = getTopLevelComponent())
+            tl->userTriedToCloseWindow();
     }
 };
 
@@ -311,7 +309,7 @@ public:
     InstallerWindow()
         : DocumentWindow ("D.A AURA Installer",
                           juce::Colour (0xff141414),
-                          juce::DocumentWindow::titleBarButtonsMid)
+                          juce::DocumentWindow::allButtons)
     {
         setResizable (true, true);
         setResizeLimits (720, 480, 1600, 1100);
