@@ -60,7 +60,7 @@ jobs:
           set -e
           # the installer executable, with the plugin bundle in a "plugins" folder
           # right next to it (the installer reads exeDir/plugins)
-          INSTALLER_EXE=$(find build -name "DreamyInstaller.exe" | head -n 1)
+          INSTALLER_EXE=$(find build -name "*AURA Installer*.exe" | head -n 1)
           test -n "$INSTALLER_EXE"
           mkdir -p "package/D.A AURA Installer/plugins"
           cp "$INSTALLER_EXE" "package/D.A AURA Installer/D.A AURA Installer.exe"
@@ -83,7 +83,7 @@ jobs:
           for b in staging/*; do codesign --force --deep --sign - "$b"; codesign --verify --deep --strict "$b"; done
 
           # the installer .app bundle
-          INSTALLER_APP=$(find build -name "*.app" -path "*DreamyInstaller*" | head -n 1)
+          INSTALLER_APP=$(find build -name "*AURA Installer*.app" | head -n 1)
           test -n "$INSTALLER_APP"
           # put the plugin bundles inside the app (Contents/plugins) so the
           # installer finds them via currentExecutableDirectory/plugins

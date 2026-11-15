@@ -84,13 +84,11 @@ target_link_libraries(DreamyReverb
 # folder (default C:\Program Files\Common Files\VST3 / ~/Library/Audio/Plug-Ins),
 # copies the plugin bundle(s) there and shows a Finish button. Resizable.
 if(DREAMY_BUILD_INSTALLER)
-    juce_add_app(DreamyInstaller
+    juce_add_gui_app(DreamyInstaller
         COMPANY_NAME    "D.A"
         PRODUCT_NAME    "D.A AURA Installer"
         BUNDLE_ID       "com.da.aura.installer"
-        VERSION         "2.0.0"
-        TARGET_NAME     "DreamyInstaller"
-        COPY_BUNDLE_AFTER_BUILD FALSE)
+        VERSION         "2.0.0")
 
     juce_generate_juce_header(DreamyInstaller)
 

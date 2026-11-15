@@ -17,7 +17,6 @@
 
 #include <juce_core/juce_core.h>
 #include <juce_gui/juce_gui.h>
-#include <juce_audio_basics/juce_audio_basics.h>
 #include <memory>
 
 namespace
