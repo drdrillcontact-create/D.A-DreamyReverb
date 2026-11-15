@@ -26,11 +26,9 @@ namespace
 
     juce::Image loadWelcomeImage()
     {
-        juce::Image img;
-        img.loadFromData (juce::MemoryInputStream (
-            BinaryData::installer_welcome_png,
-            (size_t) BinaryData::installer_welcome_pngSize, false));
-        return img;
+        return juce::ImageCache::getFromMemory (
+            BinaryData::installerwelcome_png,
+            (int) BinaryData::installerwelcome_pngSize);
     }
 
     // copy a file or a whole directory tree from src to dest
@@ -42,7 +40,7 @@ namespace
                 return false;
 
             bool ok = true;
-            for (auto* f : src.findChildFiles (juce::File::findChildFiles, true, false))
+            for (auto* f : src.findChildFiles (juce::File::findFilesAndDirectories, true))
                 ok = copyRecursive (f, dest.getChildFile (f.getFileName())) && ok;
             return ok;
         }
@@ -58,14 +56,14 @@ namespace
         if (! pluginsDir.isDirectory())
             return "Plugin files were not found next to the installer.";
 
-        bool macPlugInsRoot = juce::System::isMac()
+        bool macPlugInsRoot = (JUCE_MAC || JUCE_IOS)
                               && target.getFullPathName().contains ("Plug-Ins");
 
         if (! target.exists() && ! target.createDirectory())
             return "Could not create the install folder.";
 
         int copied = 0;
-        for (auto* f : pluginsDir.findChildFiles (juce::File::findChildFiles, true, false))
+        for (auto* f : pluginsDir.findChildFiles (juce::File::findFilesAndDirectories, true))
         {
             juce::File dest = target;
 
@@ -213,17 +211,17 @@ public:
         }
     }
 
-    void paint() override
+    void paint (juce::Graphics& g) override
     {
         const auto area = getLocalBounds();
 
         if (page == Welcome)
         {
-            paintWelcomeBackground (area);
+            paintWelcomeBackground (g, area);
             return;
         }
 
-        paintPanel (area);
+        paintPanel (g, area);
     }
 
 private:
@@ -231,7 +229,7 @@ private:
     Page page = Welcome;
 
     juce::Image bg;
-    juce::Button nextBtn, cancelBtn, backBtn, installBtn, finishBtn;
+    juce::TextButton nextBtn, cancelBtn, backBtn, installBtn, finishBtn;
     juce::TextEditor pathEdit;
     juce::ToggleButton check;
     juce::Label status, title;
@@ -249,9 +247,8 @@ private:
                  area.getY() + (area.getHeight() - h) / 2, w, h };
     }
 
-    void paintWelcomeBackground (const juce::Rectangle<int>& area)
+    void paintWelcomeBackground (juce::Graphics& g, const juce::Rectangle<int>& area)
     {
-        juce::Graphics g (*this);
         g.fillRect (area);
         if (bg.isValid())
         {
@@ -260,9 +257,8 @@ private:
         }
     }
 
-    void paintPanel (const juce::Rectangle<int>& area)
+    void paintPanel (juce::Graphics& g, const juce::Rectangle<int>& area)
     {
-        juce::Graphics g (*this);
         g.setColour (juce::Colour (0xff1a0d0e));
         g.fillRect (area);
 
