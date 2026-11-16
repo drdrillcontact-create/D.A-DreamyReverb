@@ -58,7 +58,12 @@ juce_generate_juce_header(DAAURA)
 
 target_sources(DAAURA
     PRIVATE
+        Source/AuraDSP.h
+        Source/Presets.h
+        Source/Presets.cpp
+        Source/PluginProcessor.h
         Source/PluginProcessor.cpp
+        Source/PluginEditor.h
         Source/PluginEditor.cpp
 )
 
@@ -89,6 +94,16 @@ if(APPLE)
         COMMENT "Ad-hoc signing D.A AURA AU bundle"
     )
 endif()
+
+#==============================================================================
+# The reverb engine and the factory presets on their own, without JUCE: a small program that
+# checks them (see Tests/PresetChecks.cpp). The CI runs it on every platform it builds for.
+add_executable(DAAURAPresetChecks Tests/PresetChecks.cpp Source/Presets.cpp)
+set_target_properties(DAAURAPresetChecks PROPERTIES
+    # (the generator expression keeps Visual Studio and Xcode from adding a Release/ folder)
+    RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_BINARY_DIR}/checks>"
+)
+target_include_directories(DAAURAPresetChecks PRIVATE Source)
 
 #==============================================================================
 # The installer: a JUCE desktop application built with the same framework as the plug-in.

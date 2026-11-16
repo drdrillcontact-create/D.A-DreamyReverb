@@ -13,6 +13,27 @@ Double-click a knob to reset it to its default value.
 
 ![design](Design/aurora-design.png)
 
+The aurora behind the knobs is alive: it is still at rest, and with a signal it moves with it —
+the ribbons swell and travel with the wet level, the stars brighten from left (low) to
+right (high) with the signal's spectrum, and every onset sends a ring of light outward from
+the middle. The motion comes from what the plug-in is playing, not from a timer of its own.
+
+## Presets
+
+Fifty factory presets, in five spaces:
+
+| Space | What it is for |
+|---|---|
+| **Rooms** | everyday rooms, from a small room to an empty arena |
+| **Plates** | bright, dark, vintage, vocal and drum plates |
+| **Spaces** | cathedral, church, cave, tunnel, canyon, cistern, and other architecture |
+| **Dreams** | shimmer and slow motion: dreamy cloud, halo pad, aurora borealis, weightless |
+| **Extremes** | black hole, deep space, time warp, ghost ship, endless rise, and two frozen ones |
+
+The window shows the space, the preset's name and how far through the space it is, with two
+arrows that step back and forward through that space (wrapping around inside it). The same fifty
+presets are the plug-in's programs, so the host's own preset menu lists them too.
+
 ## Controls
 
 | Knob | What it does |
@@ -64,6 +85,19 @@ Production plug-in with the same look, behaviour and CI checks.
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
+
+## Tests
+
+```sh
+bash Tests/run-preset-checks.sh     # the fifty presets: spaces, ranges, names, browsing
+bash Tests/run-editor-harness.sh    # the presets, the browser's arrows, the aurora answering a signal
+bash Tests/syntax-check.sh          # the sources against JUCE, -Wall -Wextra -Werror
+bash Tests/run-editor-pictures.sh   # draws the window to pictures, at rest and with a signal
+bash Tests/run-installer-harness.sh # the installer's pages, without a display (Linux)
+```
+
+The first three run without a plug-in host; the editor harness and the pictures build JUCE
+once through `Tests/local-juce.sh`.
 
 Plug-in bundles are written to `build/DAAURA_artefacts/Release/`, and the installer is written to
 `build/DAAURAInstaller_artefacts/Release/`.

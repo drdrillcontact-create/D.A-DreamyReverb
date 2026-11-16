@@ -53,6 +53,12 @@ jobs:
             exit 1
           fi
 
+      # The fifty factory presets are checked on their own, without a plug-in host: the spaces,
+      # the ranges, the names and the browsing (Tests/PresetChecks.cpp).
+      - name: Validate the factory presets
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: build/checks/DAAURAPresetChecks
+
       - name: Validate VST3 (pluginval)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
@@ -185,6 +191,12 @@ jobs:
             bash .github/scripts/annotate.sh "macOS build failed" build.log "error[: ]"
             exit 1
           fi
+
+      # The fifty factory presets are checked on their own, without a plug-in host: the spaces,
+      # the ranges, the names and the browsing (Tests/PresetChecks.cpp).
+      - name: Validate the factory presets
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: build/checks/DAAURAPresetChecks
 
       - name: Verify Universal Binaries & Signatures
         run: |

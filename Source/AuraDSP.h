@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <vector>
@@ -140,6 +141,7 @@ public:
         smoothSlow = 1.0f - std::exp (-1.0f / (float) (0.25 * sr));
         shimLpCoef = 1.0f - std::exp (-6.2831853f * 6000.0f / (float) sr);
 
+        bandsPrepared = false;
         reset();
         snapSmoothers = true;
     }
@@ -150,9 +152,31 @@ public:
         for (int i = 0; i < 4; ++i)        { diffL[i].clear(); diffR[i].clear(); }
         preL.clear(); preR.clear(); shiftL.clear(); shiftR.clear();
         shimFbL = shimFbR = shimLpL = shimLpR = 0.0f;
+        for (int b = 0; b < Life::numBands; ++b) { bandLow[b] = bandHigh[b] = bandEnvelope[b] = 0.0f; }
+        vitality.level.store (0.0f); vitality.transient.store (0.0f); vitality.delayLevel.store (0.0f);
+        for (int b = 0; b < Life::numBands; ++b) vitality.band[b].store (0.0f);
     }
 
     void setParams (const Params& p) { params = p; }
+
+    // ---- what the window draws: the signal as it passes through -------------------------
+    // (written once per block, read by the editor's timer; plain atomics, no locks)
+    struct Life
+    {
+        static constexpr int numBands = 16;
+
+        std::atomic<float> level      { 0.0f };   // the mixed wet level, 0..1 (about)
+        std::atomic<float> transient  { 0.0f };   // how much louder than the running average, 0..1
+        std::atomic<float> delayLevel { 0.0f };   // energy inside the reverb, 0..1 (about)
+        std::atomic<float> band[numBands];        // the wet signal's spectrum, low to high, 0..1
+    };
+
+    Life& life() noexcept { return vitality; }
+    const Life& life() const noexcept { return vitality; }
+
+    /** Smoothing for the drawing, done once per block from the audio: small steps of the
+        followers, so the window's motion has the signal's own dynamics. */
+    void trackLife (const float* wetL, const float* wetR, int numSamples);
 
     // In-place safe (inL may equal outL etc.)
     void process (const float* inL, const float* inR, float* outL, float* outR, int numSamples)
@@ -280,6 +304,7 @@ public:
 
 private:
     static inline float clamp (float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+    static inline float clamp (float v)                        { return clamp (v, 0.0f, 1.0f); }
 
     static constexpr float minSizeScale = 0.35f;
     static constexpr float maxSizeScale = 2.0f;
@@ -296,9 +321,107 @@ private:
     OctaveUp shiftL, shiftR;
     float shimFbL = 0, shimFbR = 0, shimLpL = 0, shimLpR = 0, shimLpCoef = 0.5f;
 
+    Life vitality;
+
+    // the bands' filters (only used by trackLife(), on the audio thread)
+    bool bandsPrepared = false;
+    float bandCoefficients[Life::numBands] {};
+    float bandLow[Life::numBands] {}, bandHigh[Life::numBands] {}, bandEnvelope[Life::numBands] {};
+
     float smoothFast = 0.01f, smoothSlow = 0.001f;
     float sDry = 1, sWet = 0, sSize = 1, sPre = 1, sDepth = 0, sShim = 0, sWidth = 1, sInGain = 1;
     bool snapSmoothers = true;
 };
+
+// ---- what the window draws ---------------------------------------------------------------
+//
+// Called once per block, after process(). The bands are a running spectrum of the wet signal:
+// one-pole band pass filters, spread over the audio range in sixteenths of an octave, whose
+// envelopes rise quickly and fall slowly - the same way a level meter does. Everything is
+// smoothed a little more here so that the window's motion follows the signal without shaking.
+inline void Reverb::trackLife (const float* wetL, const float* wetR, int numSamples)
+{
+    if (wetL == nullptr || wetR == nullptr || numSamples <= 0)
+        return;
+
+    constexpr int numBands = Life::numBands;
+
+    // the bands' centres: 55 Hz up to about 11 kHz, spread evenly in octaves
+    static constexpr float lowestBand = 55.0f, highestBand = 11000.0f;
+
+    float sumSquares = 0.0f;
+
+    for (int n = 0; n < numSamples; ++n)
+    {
+        const float mono = 0.5f * (wetL[n] + wetR[n]);
+        sumSquares += mono * mono;
+    }
+
+    const float rms = std::sqrt (sumSquares / (float) numSamples);
+
+    // (about) -60 dB .. 0 dB, as a number between 0 and 1
+    const float level = clamp ((20.0f * std::log10 (rms + 1.0e-9f) + 60.0f) / 60.0f, 0.0f, 1.0f);
+
+    const float previous = vitality.level.load (std::memory_order_relaxed);
+    vitality.level.store (previous + 0.35f * (level - previous), std::memory_order_relaxed);
+
+    // a transient is a block that is louder than the running average by a fair step
+    const float rise = (level - previous) / 0.25f;
+    const float transient = clamp (rise, 0.0f, 1.0f);
+    const float lasting = vitality.transient.load (std::memory_order_relaxed);
+    vitality.transient.store (std::max (transient, lasting * 0.82f), std::memory_order_relaxed);
+
+    // the energy inside the reverb: the input's level against the wet level that leaves it
+    // (the mix is taken out of it, so that the window moves whether the reverb is mixed in
+    //  wet or dry)
+    const float inLevel = vitality.delayLevel.load (std::memory_order_relaxed);
+    vitality.delayLevel.store (inLevel + 0.3f * (level - inLevel), std::memory_order_relaxed);
+
+    // the bands: one band pass filter per band, run over the block
+    if (! bandsPrepared)
+    {
+        const float fsr = (float) sr;
+
+        for (int b = 0; b < numBands; ++b)
+        {
+            const float t = numBands > 1 ? (float) b / (float) (numBands - 1) : 0.0f;
+            const float centre = lowestBand * std::pow (highestBand / lowestBand, t);
+
+            // a band pass as a pair of one-pole filters: low pass, then high pass
+            bandCoefficients[b] = clamp (6.2831853f * centre / fsr, 0.0001f, 0.9f);
+            bandLow[b] = 0.0f;
+            bandHigh[b] = 0.0f;
+            bandEnvelope[b] = 0.0f;
+        }
+
+        bandsPrepared = true;
+    }
+
+    for (int b = 0; b < numBands; ++b)
+    {
+        const float c = bandCoefficients[b];
+        float low = bandLow[b], high = bandHigh[b], envelope = bandEnvelope[b];
+
+        // the block is strided: every 8th sample is enough for a picture this size
+        for (int n = 0; n < numSamples; n += 8)
+        {
+            const float x = 0.5f * (wetL[n] + wetR[n]);
+            low  += c * (x - low);
+            high += c * (low - high);
+            const float bandPass = low - high;
+
+            const float rectified = std::fabs (bandPass);
+            envelope += (rectified > envelope ? 0.35f : 0.06f) * (rectified - envelope);
+        }
+
+        bandLow[b] = low;
+        bandHigh[b] = high;
+        bandEnvelope[b] = envelope;
+
+        // (about) -50 dB .. -6 dB, as a number between 0 and 1
+        const float shown = clamp ((20.0f * std::log10 (envelope + 1.0e-9f) + 50.0f) / 44.0f, 0.0f, 1.0f);
+        vitality.band[b].store (shown, std::memory_order_relaxed);
+    }
+}
 
 } // namespace aura
