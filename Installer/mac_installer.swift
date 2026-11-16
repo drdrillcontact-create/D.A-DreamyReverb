@@ -208,7 +208,7 @@ if args.count > 1 && args[1] == "--test-layout" {
     exit(0)
 }
 let app = NSApplication.shared
-let delegate = AppDelegate()
+private let delegate = AppDelegate()
 app.delegate = delegate
 app.setActivationPolicy(.regular)
 app.run()
