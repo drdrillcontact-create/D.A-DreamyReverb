@@ -18,6 +18,10 @@ the ribbons swell and travel with the wet level, the stars brighten from left (l
 right (high) with the signal's spectrum, and every onset sends a ring of light outward from
 the middle. The motion comes from what the plug-in is playing, not from a timer of its own.
 
+| at rest | with a signal |
+|---|---|
+| ![at rest](Docs/pictures/aurora-at-rest.png) | ![with a signal](Docs/pictures/aurora-with-a-signal.png) |
+
 ## Presets
 
 Fifty factory presets, in five spaces:
