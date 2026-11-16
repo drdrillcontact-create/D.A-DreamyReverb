@@ -48,12 +48,19 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          python Installer/generate_payload.py --bundle 'staging/D.A AURA.vst3' --output build/installer-payload --artwork Installer/welcome.png --manifest Installer/installer.manifest
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake -S Installer -B build-installer -A x64 "-DPAYLOAD_DIR=$pwd/build/installer-payload"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build build-installer --config Release --parallel 4
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          function Invoke-Checked {
+            param([string]$Command, [string[]]$Arguments)
+            $log = & $Command @Arguments 2>&1 | Tee-Object -Variable captured
+            $code = $LASTEXITCODE
+            $log | ForEach-Object { Write-Host $_ }
+            if ($code -ne 0) {
+              $captured | Select-Object -Last 20 | ForEach-Object { Write-Output "::error::$($_.ToString())" }
+              throw "$Command failed with exit code $code"
+            }
+          }
+          Invoke-Checked python @('Installer/generate_payload.py', '--bundle', 'staging/D.A AURA.vst3', '--output', 'build/installer-payload', '--artwork', 'Installer/welcome.png', '--manifest', 'Installer/installer.manifest')
+          Invoke-Checked cmake @('-S', 'Installer', '-B', 'build-installer', '-A', 'x64', "-DPAYLOAD_DIR=$pwd/build/installer-payload")
+          Invoke-Checked cmake @('--build', 'build-installer', '--config', 'Release', '--parallel', '4')
           Copy-Item 'build-installer/Release/D.A AURA Installer.exe' package/
           # The copied EXE must carry every plugin file without staging beside it.
           $isolated = Join-Path $env:RUNNER_TEMP 'aura-installer-test'
