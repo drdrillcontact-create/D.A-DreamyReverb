@@ -6,6 +6,8 @@
 #include <shlwapi.h>
 #include <algorithm>
 #include <cwchar>
+#include <cstdlib>
+#include <initializer_list>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -131,14 +133,64 @@ void activate(HWND hwnd, int action) {
     }
 }
 
+// Explicit pixel units and a source rectangle prevent GDI+ from applying the
+// bitmap/screen DPI ratio a second time on high-DPI displays.
+void drawArtwork(Gdiplus::Graphics& graphics, int width, int height) {
+    graphics.SetPageUnit(Gdiplus::UnitPixel);
+    graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    graphics.DrawImage(artwork, Gdiplus::Rect(0, 0, width, height),
+                       0, 0, artWidth, artHeight, Gdiplus::UnitPixel);
+}
+
+bool testRendering() {
+    const auto diff = [](BYTE a, BYTE b) { return std::abs(int(a) - int(b)); };
+    for (int width : {artWidth, artWidth / 2}) {
+        const int height = MulDiv(width, artHeight, artWidth);
+        Gdiplus::Bitmap baseline(width, height, PixelFormat32bppARGB);
+        baseline.SetResolution(96.0f, 96.0f);
+        { Gdiplus::Graphics graphics(&baseline); drawArtwork(graphics, width, height); }
+        // The right/bottom areas (including buttons) must really be drawn.
+        if (width == artWidth) {
+            for (int y : {30, 200, 350, 480, 530}) {
+                for (int x : {100, 500, 800, 1200, 1400}) {
+                    Gdiplus::Color expected, actual;
+                    if (artwork->GetPixel(x, y, &expected) != Gdiplus::Ok ||
+                        baseline.GetPixel(x, y, &actual) != Gdiplus::Ok) return false;
+                    if (diff(expected.GetRed(), actual.GetRed()) > 65 ||
+                        diff(expected.GetGreen(), actual.GetGreen()) > 65 ||
+                        diff(expected.GetBlue(), actual.GetBlue()) > 65) return false;
+                }
+            }
+        }
+        // The same client size must render identically at higher target DPIs.
+        for (float dpi : {120.0f, 144.0f, 192.0f}) {
+            Gdiplus::Bitmap target(width, height, PixelFormat32bppARGB);
+            if (target.SetResolution(dpi, dpi) != Gdiplus::Ok) return false;
+            { Gdiplus::Graphics graphics(&target); drawArtwork(graphics, width, height); }
+            for (int y : {30, 200, 350, 480, 530}) {
+                for (int x : {100, 500, 800, 1200, 1400}) {
+                    const int dx = MulDiv(x, width, artWidth);
+                    const int dy = MulDiv(y, height, artHeight);
+                    Gdiplus::Color expected, actual;
+                    if (baseline.GetPixel(dx, dy, &expected) != Gdiplus::Ok ||
+                        target.GetPixel(dx, dy, &actual) != Gdiplus::Ok) return false;
+                    if (diff(expected.GetRed(), actual.GetRed()) > 2 ||
+                        diff(expected.GetGreen(), actual.GetGreen()) > 2 ||
+                        diff(expected.GetBlue(), actual.GetBlue()) > 2) return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_PAINT: {
         PAINTSTRUCT ps; HDC dc = BeginPaint(hwnd, &ps);
         RECT r; GetClientRect(hwnd, &r);
         Gdiplus::Graphics graphics(dc);
-        graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-        graphics.DrawImage(artwork, 0, 0, r.right, r.bottom);
+        drawArtwork(graphics, r.right, r.bottom);
         EndPaint(hwnd, &ps); return 0;
     }
     case WM_ERASEBKGND: return 1;
@@ -190,6 +242,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR commandLine, int show)
     if (!artwork || artwork->GetLastStatus() != Gdiplus::Ok) {
         MessageBoxW(nullptr, L"The installer artwork could not be loaded.", L"D.A AURA", MB_OK | MB_ICONERROR);
         delete artwork; if (artworkStream) artworkStream->Release(); Gdiplus::GdiplusShutdown(token); return 1;
+    }
+    if (commandLine && wcscmp(commandLine, L"--test-render") == 0) {
+        const bool ok = testRendering();
+        delete artwork; artworkStream->Release(); Gdiplus::GdiplusShutdown(token);
+        return ok ? 0 : 2;
     }
     WNDCLASSW wc = {}; wc.lpfnWndProc = windowProc; wc.hInstance = instance;
     wc.lpszClassName = L"DAAURAInstaller"; wc.hCursor = LoadCursor(nullptr, IDC_ARROW);

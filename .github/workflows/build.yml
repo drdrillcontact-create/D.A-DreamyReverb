@@ -19,7 +19,7 @@ jobs:
             configure: cmake -B build -A x64
           - name: macOS Universal (AU + VST3)
             os: macos-latest
-            artifact: DA-AURA-macOS-AU-VST3
+            artifact: DA-AURA-macOS-Installer
             configure: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
     steps:
@@ -68,6 +68,8 @@ jobs:
           Copy-Item 'package/D.A AURA Installer.exe' $isolated
           $test = Start-Process -FilePath (Join-Path $isolated 'D.A AURA Installer.exe') -ArgumentList '--verify-payload' -WorkingDirectory $isolated -Wait -PassThru
           if ($test.ExitCode -ne 0) { throw 'Embedded installer payload verification failed' }
+          $render = Start-Process -FilePath (Join-Path $isolated 'D.A AURA Installer.exe') -ArgumentList '--test-render' -WorkingDirectory $isolated -Wait -PassThru
+          if ($render.ExitCode -ne 0) { throw 'Installer DPI rendering test failed' }
           python Installer/verify_payload.py (Join-Path $isolated 'D.A AURA Installer.exe') 'staging/D.A AURA.vst3'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -80,8 +82,49 @@ jobs:
           test -n "$(ls -A staging)"
           # ad-hoc sign so the bundles load on Apple Silicon
           for b in staging/*; do codesign --force --deep --sign - "$b"; done
-          # zip here so bundle permissions survive the artifact upload
-          ditto -c -k staging "package/DA-AURA-macOS.zip"
+
+      - name: Build and test self-contained macOS installer
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_checked() {
+            local output code
+            if output=$("$@" 2>&1); then printf '%s\n' "$output"; else
+              code=$?; printf '%s\n' "$output"
+              printf '%s\n' "$output" | tail -20 | while IFS= read -r line; do echo "::error::$line"; done
+              return "$code"
+            fi
+          }
+          app="mac-package/D.A AURA Installer.app"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/payload" package
+          cp Installer/mac-Info.plist "$app/Contents/Info.plist"
+          cp Installer/welcome.png "$app/Contents/Resources/welcome.png"
+          ditto "staging/D.A AURA.vst3" "$app/Contents/Resources/payload/D.A AURA.vst3"
+          ditto "staging/D.A AURA.component" "$app/Contents/Resources/payload/D.A AURA.component"
+          # Compile for both Intel and Apple Silicon.
+          for arch in x86_64 arm64; do
+            if ! swiftc -target "$arch-apple-macosx11.0" -O Installer/mac_installer.swift -o "build/installer-$arch" 2>"build/swift-$arch.log"; then
+              tail -30 "build/swift-$arch.log" | while IFS= read -r line; do echo "::error::$line"; done
+              exit 1
+            fi
+          done
+          run_checked lipo -create build/installer-x86_64 build/installer-arm64 -output "$app/Contents/MacOS/DAAURAInstaller"
+          run_checked codesign --force --deep --sign - "$app"
+          run_checked codesign --verify --deep --strict "$app"
+          # Copy the app away from staging and test that it installs both embedded bundles,
+          # including replacing an existing install, without the DMG or sibling files.
+          isolated="$RUNNER_TEMP/aura-isolated"
+          mkdir -p "$isolated"
+          ditto "$app" "$isolated/D.A AURA Installer.app"
+          executable="$isolated/D.A AURA Installer.app/Contents/MacOS/DAAURAInstaller"
+          run_checked "$executable" --verify-payload
+          run_checked "$executable" --test-layout
+          run_checked "$executable" --test-install-root "$isolated/installed"
+          run_checked "$executable" --test-install-root "$isolated/installed"
+          run_checked diff -r "$app/Contents/Resources/payload/D.A AURA.vst3" "$isolated/installed/VST3/D.A AURA.vst3"
+          run_checked diff -r "$app/Contents/Resources/payload/D.A AURA.component" "$isolated/installed/Components/D.A AURA.component"
+          run_checked hdiutil create -volname "D.A AURA Installer" -srcfolder mac-package -ov -format UDZO "package/DA-AURA-macOS-Installer.dmg"
 
       - name: Upload
         uses: actions/upload-artifact@v4
