@@ -1,154 +1,326 @@
+# Builds the plug-in (Windows: VST3; macOS: Audio Unit and VST3) and, for each system, its installer
 name: Build D.A AURA
+
+permissions:
+  contents: read
 
 on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      pluginval_seeds:
+        description: "Random seeds for pluginval, separated by spaces (empty = the usual two)"
+        required: false
+        default: ""
+      screens_as_text:
+        description: "Also put copies of the installer's screenshots on the run page, as text"
+        type: boolean
+        required: false
+        default: false
+
+env:
+  # What the plug-in is called: DAAURA_PRODUCT_NAME in CMakeLists.txt. The files are named after it.
+  PRODUCT: D.A AURA
+  PLUGINVAL_VERSION: v1.0.4
+  PLUGINVAL_SEEDS: ${{ inputs.pluginval_seeds || '0x3 0x7' }}
 
 jobs:
-  build:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Windows x64 (VST3)
-            os: windows-latest
-            artifact: DA-AURA-Windows-x64-Installer
-            configure: cmake -B build -A x64
-          - name: macOS Universal (AU + VST3)
-            os: macos-latest
-            artifact: DA-AURA-macOS-Installer
-            configure: cmake -B build -DCMAKE_BUILD_TYPE=Release
-
+  build-windows:
+    name: Windows x64 (VST3 and installer)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
-      - name: Configure
-        run: ${{ matrix.configure }}
+      - name: Configure CMake
+        run: cmake -B build -A x64
 
-      - name: Build
-        run: cmake --build build --config Release --parallel 4
-
-      - name: Collect plugins (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
+      # (MSBUILDDISABLENODEREUSE: no build tools are left running afterwards. They would keep the
+      # build folder open, and it is moved aside further down.)
+      - name: Build the VST3 and its installer (Release)
+        id: build
+        env:
+          MSBUILDDISABLENODEREUSE: 1
         run: |
-          mkdir -p staging package
-          find build -path "*_artefacts*" -type d -name "*.vst3" -prune -exec cp -R {} staging/ \;
-          test -d "staging/D.A AURA.vst3"
+          set -o pipefail
+          if ! cmake --build build --config Release --parallel 2>&1 | tee build.log; then
+            bash .github/scripts/annotate.sh "Windows build failed" build.log "error"
+            exit 1
+          fi
 
-      - name: Test installer payload generation
-        shell: bash
+      - name: Validate VST3 (pluginval)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
-          PY=$(command -v python || command -v python3)
-          "$PY" -m unittest discover -s tests -v
+          curl -fsSL -o pluginval.zip "https://github.com/Tracktion/pluginval/releases/download/${PLUGINVAL_VERSION}/pluginval_Windows.zip"
+          7z x -y pluginval.zip > /dev/null
+          bash .github/scripts/run-pluginval.sh ./pluginval.exe "build/DAAURA_artefacts/Release/VST3/$PRODUCT.vst3" "Windows VST3" $PLUGINVAL_SEEDS
 
-      - name: Build self-contained Windows installer
-        if: runner.os == 'Windows'
+      - name: Package
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: pwsh
         run: |
-          function Invoke-Checked {
-            param([string]$Command, [string[]]$Arguments)
-            $log = & $Command @Arguments 2>&1 | Tee-Object -Variable captured
-            $code = $LASTEXITCODE
-            $log | ForEach-Object { Write-Host $_ }
-            if ($code -ne 0) {
-              $captured | Select-Object -Last 20 | ForEach-Object { Write-Output "::error::$($_.ToString())" }
-              throw "$Command failed with exit code $code"
-            }
-          }
-          Invoke-Checked python @('Installer/generate_payload.py', '--bundle', 'staging/D.A AURA.vst3', '--output', 'build/installer-payload', '--artwork', 'Installer/welcome.png', '--manifest', 'Installer/installer.manifest')
-          Invoke-Checked cmake @('-S', 'Installer', '-B', 'build-installer', '-A', 'x64', "-DPAYLOAD_DIR=$pwd/build/installer-payload")
-          Invoke-Checked cmake @('--build', 'build-installer', '--config', 'Release', '--parallel', '4')
-          Copy-Item 'build-installer/Release/D.A AURA Installer.exe' package/
-          # The copied EXE must carry every plugin file without staging beside it.
-          $isolated = Join-Path $env:RUNNER_TEMP 'aura-installer-test'
-          New-Item -ItemType Directory -Force $isolated | Out-Null
-          Copy-Item 'package/D.A AURA Installer.exe' $isolated
-          $test = Start-Process -FilePath (Join-Path $isolated 'D.A AURA Installer.exe') -ArgumentList '--verify-payload' -WorkingDirectory $isolated -Wait -PassThru
-          if ($test.ExitCode -ne 0) { throw 'Embedded installer payload verification failed' }
-          $render = Start-Process -FilePath (Join-Path $isolated 'D.A AURA Installer.exe') -ArgumentList '--test-render' -WorkingDirectory $isolated -Wait -PassThru
-          if ($render.ExitCode -ne 0) { throw 'Installer DPI rendering test failed' }
-          $window = Start-Process -FilePath (Join-Path $isolated 'D.A AURA Installer.exe') -ArgumentList '--test-window' -WorkingDirectory $isolated -Wait -PassThru
-          if ($window.ExitCode -ne 0) { throw 'Installer window rendering or hit test failed' }
-          $testRoot = Join-Path $isolated 'installed'
-          for ($i = 0; $i -lt 2; $i++) {
-            $install = Start-Process -FilePath (Join-Path $isolated 'D.A AURA Installer.exe') -ArgumentList @('--test-install-root', "`"$testRoot`"") -WorkingDirectory $isolated -Wait -PassThru
-            if ($install.ExitCode -ne 0) { throw 'Installer extraction test failed' }
-          }
-          $source = (Get-Item 'staging/D.A AURA.vst3').FullName
-          $target = Join-Path $testRoot 'D.A AURA.vst3'
-          Get-ChildItem $source -File -Recurse | ForEach-Object {
-            $relative = $_.FullName.Substring($source.Length + 1)
-            $installed = Join-Path $target $relative
-            if (!(Test-Path -LiteralPath $installed) -or (Get-FileHash -LiteralPath $_.FullName).Hash -ne (Get-FileHash -LiteralPath $installed).Hash) {
-              throw "Installed file does not match: $relative"
-            }
-          }
-          python Installer/verify_payload.py (Join-Path $isolated 'D.A AURA Installer.exe') 'staging/D.A AURA.vst3'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $vst3 = "build\DAAURA_artefacts\Release\VST3\$env:PRODUCT.vst3"
+          $installer = "build\DAAURAInstaller_artefacts\Release\$env:PRODUCT Installer.exe"
+          if (-not (Test-Path $vst3)) { throw "VST3 bundle not found at $vst3" }
+          if (-not (Test-Path $installer)) { throw "Installer not found at $installer" }
+          Compress-Archive -Path $installer -DestinationPath "D.A-AURA-Windows-Installer.zip" -Force
+          Compress-Archive -Path $vst3 -DestinationPath "D.A-AURA-Windows-x64-VST3.zip" -Force
 
-      - name: Collect plugins (macOS)
-        if: runner.os == 'macOS'
+      # The installer as it reaches somebody: one file, with the plug-in inside it. It is taken
+      # out of the zip that is uploaded and put on the Desktop, and the whole build is moved out
+      # of its reach. Started there, it goes through itself (drags its window by its frame, moves
+      # it, clicks Next, Next, Finish) and so installs into C:\Program Files\Common Files\VST3.
+      # The screen is photographed meanwhile: around its frame the window has to be see-through
+      # in the photograph. What arrives is compared with what was built.
+      - name: Run the installer, on its own on the Desktop
+        id: installer
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
-          mkdir -p staging package
-          find build -path "*_artefacts*" -type d \( -name "*.vst3" -o -name "*.component" \) -prune -exec cp -R {} staging/ \;
-          ls -la staging
-          test -d "staging/D.A AURA.vst3"
-          test -d "staging/D.A AURA.component"
-          # ad-hoc sign so the bundles load on Apple Silicon
-          for b in staging/*; do codesign --force --deep --sign - "$b"; done
+          zip="D.A-AURA-Windows-Installer.zip"
 
-      - name: Build and test self-contained macOS installer
-        if: runner.os == 'macOS'
-        shell: bash
+          holds="$(7z l -ba -slt "$zip" | tr -d '\r' | sed -n 's/^Path = //p' | grep -v -x -F "$zip" || true)"
+          if [ "$holds" != "$PRODUCT Installer.exe" ]; then
+            echo "::error title=The installer's zip does not hold the installer alone::It holds: $holds"
+            exit 1
+          fi
+
+          desktop="$(cygpath -u "$USERPROFILE")/Desktop"
+          mkdir -p "$desktop"
+          rm -f "$desktop/$PRODUCT Installer.exe"
+          7z x -y "-o$(cygpath -w "$desktop")" "$zip" > /dev/null
+          installer="$desktop/$PRODUCT Installer.exe"
+
+          # Windows has to ask for administrator rights before the installer starts: the VST3
+          # folder cannot be written to without them.
+          if ! grep -a -q "requireAdministrator" "$installer"; then
+            echo "::error title=The installer does not ask for administrator rights::Its manifest does not say requireAdministrator."
+            exit 1
+          fi
+
+          folder="$(cygpath -u "${COMMONPROGRAMFILES:-C:\\Program Files\\Common Files}")/VST3"
+
+          OUT_OF_REACH=build bash .github/scripts/run-installer.sh "$installer" "Windows" installer-pictures \
+            "build/DAAURA_artefacts/Release/VST3/$PRODUCT.vst3=$folder/$PRODUCT.vst3"
+
+      - name: Screenshot of the welcome page, as text (left half)
+        if: ${{ !cancelled() && inputs.screens_as_text && steps.build.outcome == 'success' }}
+        run: bash .github/scripts/annotate-picture.sh "Screen - Windows - welcome-left" installer-pictures/screen-welcome-left.png
+
+      - name: Screenshot of the welcome page, as text (right half)
+        if: ${{ !cancelled() && inputs.screens_as_text && steps.build.outcome == 'success' }}
+        run: bash .github/scripts/annotate-picture.sh "Screen - Windows - welcome-right" installer-pictures/screen-welcome-right.png
+
+      - name: Screenshot of the location page, as text
+        if: ${{ !cancelled() && inputs.screens_as_text && steps.build.outcome == 'success' }}
+        run: bash .github/scripts/annotate-picture.sh "Screen - Windows - location" installer-pictures/screen-location.png
+
+      - name: Screenshot of the finished page, as text
+        if: ${{ !cancelled() && inputs.screens_as_text && steps.build.outcome == 'success' }}
+        run: bash .github/scripts/annotate-picture.sh "Screen - Windows - finished" installer-pictures/screen-finished.png
+
+      # The same file on the Desktop once more, this time without its window. It replaces the
+      # copy the step above installed.
+      - name: Run it once more, without its window
         run: |
-          set -euo pipefail
-          run_checked() {
-            local output code
-            if output=$("$@" 2>&1); then printf '%s\n' "$output"; else
-              code=$?; printf '%s\n' "$output"
-              printf '%s\n' "$output" | tail -20 | while IFS= read -r line; do echo "::error::$line"; done
-              return "$code"
-            fi
-          }
-          app="mac-package/D.A AURA Installer.app"
-          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/payload" package
-          cp Installer/mac-Info.plist "$app/Contents/Info.plist"
-          cp Installer/welcome.png "$app/Contents/Resources/welcome.png"
-          ditto "staging/D.A AURA.vst3" "$app/Contents/Resources/payload/D.A AURA.vst3"
-          ditto "staging/D.A AURA.component" "$app/Contents/Resources/payload/D.A AURA.component"
-          # Compile for both Intel and Apple Silicon.
-          for arch in x86_64 arm64; do
-            if ! swiftc -target "$arch-apple-macosx11.0" -O Installer/mac_installer.swift -o "build/installer-$arch" 2>"build/swift-$arch.log"; then
-              tail -30 "build/swift-$arch.log" | while IFS= read -r line; do echo "::error::$line"; done
-              exit 1
-            fi
-          done
-          run_checked lipo -create build/installer-x86_64 build/installer-arm64 -output "$app/Contents/MacOS/DAAURAInstaller"
-          run_checked codesign --force --deep --sign - "$app"
-          run_checked codesign --verify --deep --strict "$app"
-          # Copy the app away from staging and test that it installs both embedded bundles,
-          # including replacing an existing install, without the DMG or sibling files.
-          isolated="$RUNNER_TEMP/aura-isolated"
-          mkdir -p "$isolated"
-          ditto "$app" "$isolated/D.A AURA Installer.app"
-          executable="$isolated/D.A AURA Installer.app/Contents/MacOS/DAAURAInstaller"
-          run_checked "$executable" --verify-payload
-          run_checked "$executable" --test-layout
-          run_checked "$executable" --test-window
-          run_checked "$executable" --test-install-root "$isolated/installed"
-          run_checked "$executable" --test-install-root "$isolated/installed"
-          run_checked diff -r "$app/Contents/Resources/payload/D.A AURA.vst3" "$isolated/installed/VST3/D.A AURA.vst3"
-          run_checked diff -r "$app/Contents/Resources/payload/D.A AURA.component" "$isolated/installed/Components/D.A AURA.component"
-          run_checked hdiutil create -volname "D.A AURA Installer" -srcfolder mac-package -ov -format UDZO "package/D.A AURA Installer.dmg"
+          desktop="$(cygpath -u "$USERPROFILE")/Desktop"
+          folder="$(cygpath -u "${COMMONPROGRAMFILES:-C:\\Program Files\\Common Files}")/VST3"
 
-      - name: Upload
-        uses: actions/upload-artifact@v4
+          OUT_OF_REACH=build bash .github/scripts/run-installer-silently.sh "$desktop/$PRODUCT Installer.exe" "Windows" \
+            "build/DAAURA_artefacts/Release/VST3/$PRODUCT.vst3=$folder/$PRODUCT.vst3"
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.artifact }}
-          path: package
+          path: D.A-AURA-Windows-Installer.zip
+          archive: false
           if-no-files-found: error
+
+      - name: Upload the VST3 on its own
+        uses: actions/upload-artifact@v7
+        with:
+          path: D.A-AURA-Windows-x64-VST3.zip
+          archive: false
+          if-no-files-found: error
+
+      - name: Package the installer's pictures
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          if (Test-Path installer-pictures\*.png) {
+            Compress-Archive -Path installer-pictures\*.png -DestinationPath "D.A-AURA-Windows-installer-pictures.zip" -Force
+          }
+
+      - name: Upload the installer's pictures
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          path: D.A-AURA-Windows-installer-pictures.zip
+          archive: false
+          if-no-files-found: warn
+
+  build-macos:
+    name: macOS Universal (AU, VST3 and installer)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Configure CMake (Universal arm64 + x86_64)
+        run: >
+          cmake -B build -G Xcode
+          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+
+      - name: Build AU, VST3 and their installer (Release)
+        id: build
+        run: |
+          set -o pipefail
+          if ! cmake --build build --config Release --parallel 2>&1 | tee build.log; then
+            bash .github/scripts/annotate.sh "macOS build failed" build.log "error[: ]"
+            exit 1
+          fi
+
+      - name: Verify Universal Binaries & Signatures
+        run: |
+          app="build/DAAURAInstaller_artefacts/Release/$PRODUCT Installer.app"
+
+          for binary in "build/DAAURA_artefacts/Release/AU/$PRODUCT.component/Contents/MacOS/$PRODUCT" \
+                        "build/DAAURA_artefacts/Release/VST3/$PRODUCT.vst3/Contents/MacOS/$PRODUCT" \
+                        "$app/Contents/MacOS/$PRODUCT Installer"; do
+            lipo -info "$binary"
+            lipo "$binary" -verify_arch arm64 x86_64
+          done
+
+          codesign --verify --deep --strict "build/DAAURA_artefacts/Release/AU/$PRODUCT.component"
+          codesign --verify --deep --strict "build/DAAURA_artefacts/Release/VST3/$PRODUCT.vst3"
+          codesign --verify --deep --strict "$app"
+
+          unzip -l "$app/Contents/Resources/payload.zip" | tail -n 1
+
+      - name: Validate VST3 (pluginval)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          curl -fsSL -o pluginval.zip "https://github.com/Tracktion/pluginval/releases/download/${PLUGINVAL_VERSION}/pluginval_macOS.zip"
+          unzip -q -o pluginval.zip
+          bash .github/scripts/run-pluginval.sh pluginval.app/Contents/MacOS/pluginval "build/DAAURA_artefacts/Release/VST3/$PRODUCT.vst3" "macOS VST3" $PLUGINVAL_SEEDS
+
+      - name: Package
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          mkdir -p dist
+          cp -R "build/DAAURA_artefacts/Release/AU/$PRODUCT.component" dist/
+          cp -R "build/DAAURA_artefacts/Release/VST3/$PRODUCT.vst3" dist/
+          (cd dist && zip -r -y ../D.A-AURA-macOS-Universal-AU-VST3.zip "$PRODUCT.component" "$PRODUCT.vst3")
+          ditto -c -k --sequesterRsrc --keepParent "build/DAAURAInstaller_artefacts/Release/$PRODUCT Installer.app" D.A-AURA-macOS-Installer.zip
+
+      - name: Run the installer, on its own on the Desktop
+        id: installer
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          zip="D.A-AURA-macOS-Installer.zip"
+
+          holds="$(unzip -Z1 "$zip" | cut -d/ -f1 | grep -v '^__MACOSX$' | sort -u)"
+          if [ "$holds" != "$PRODUCT Installer.app" ]; then
+            echo "::error title=The installer's zip does not hold the installer alone::It holds: $holds"
+            exit 1
+          fi
+
+          mkdir -p "$HOME/Desktop"
+          rm -rf "$HOME/Desktop/$PRODUCT Installer.app"
+          ditto -x -k "$zip" "$HOME/Desktop"
+          app="$HOME/Desktop/$PRODUCT Installer.app"
+
+          codesign --verify --deep --strict "$app"
+
+          plugins="$HOME/Library/Audio/Plug-Ins"
+
+          OUT_OF_REACH=build bash .github/scripts/run-installer.sh "$app/Contents/MacOS/$PRODUCT Installer" "macOS" installer-pictures \
+            "build/DAAURA_artefacts/Release/AU/$PRODUCT.component=$plugins/Components/$PRODUCT.component" \
+            "build/DAAURA_artefacts/Release/VST3/$PRODUCT.vst3=$plugins/VST3/$PRODUCT.vst3"
+
+          codesign --verify --deep --strict "$plugins/Components/$PRODUCT.component"
+          codesign --verify --deep --strict "$plugins/VST3/$PRODUCT.vst3"
+
+      - name: Screenshot of the welcome page, as text (left half)
+        if: ${{ !cancelled() && inputs.screens_as_text && steps.build.outcome == 'success' }}
+        run: bash .github/scripts/annotate-picture.sh "Screen - macOS - welcome-left" installer-pictures/screen-welcome-left.png
+
+      - name: Screenshot of the welcome page, as text (right half)
+        if: ${{ !cancelled() && inputs.screens_as_text && steps.build.outcome == 'success' }}
+        run: bash .github/scripts/annotate-picture.sh "Screen - macOS - welcome-right" installer-pictures/screen-welcome-right.png
+
+      - name: Screenshot of the location page, as text
+        if: ${{ !cancelled() && inputs.screens_as_text && steps.build.outcome == 'success' }}
+        run: bash .github/scripts/annotate-picture.sh "Screen - macOS - location" installer-pictures/screen-location.png
+
+      - name: Screenshot of the finished page, as text
+        if: ${{ !cancelled() && inputs.screens_as_text && steps.build.outcome == 'success' }}
+        run: bash .github/scripts/annotate-picture.sh "Screen - macOS - finished" installer-pictures/screen-finished.png
+
+      - name: Validate AU (auval)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          installed="$HOME/Library/Audio/Plug-Ins/Components/$PRODUCT.component"
+
+          if [ ! -d "$installed" ]; then
+            echo "::warning title=auval::The installer did not put the Audio Unit in place, so a copy of the built one is validated."
+            mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+            cp -R "build/DAAURA_artefacts/Release/AU/$PRODUCT.component" "$HOME/Library/Audio/Plug-Ins/Components/"
+            killall -9 AudioComponentRegistrar 2>/dev/null || true
+          fi
+
+          for attempt in 1 2 3; do
+            if auval -v aufx Aura DApr > auval.log 2>&1; then
+              cat auval.log
+              bash .github/scripts/annotate.sh "auval passed the Audio Unit" auval.log 'VALIDATION|PASS|FAIL' notice
+              exit 0
+            fi
+            cat auval.log
+            echo "auval attempt $attempt failed; waiting for the component to be registered"
+            sleep 10
+          done
+          bash .github/scripts/annotate.sh "auval rejected the Audio Unit" auval.log
+          exit 1
+
+      - name: Run it once more, without its window
+        run: |
+          plugins="$HOME/Library/Audio/Plug-Ins"
+
+          OUT_OF_REACH=build bash .github/scripts/run-installer-silently.sh "$HOME/Desktop/$PRODUCT Installer.app/Contents/MacOS/$PRODUCT Installer" "macOS" \
+            "build/DAAURA_artefacts/Release/AU/$PRODUCT.component=$plugins/Components/$PRODUCT.component" \
+            "build/DAAURA_artefacts/Release/VST3/$PRODUCT.vst3=$plugins/VST3/$PRODUCT.vst3"
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v7
+        with:
+          path: D.A-AURA-macOS-Installer.zip
+          archive: false
+          if-no-files-found: error
+
+      - name: Upload the AU and VST3 on their own
+        uses: actions/upload-artifact@v7
+        with:
+          path: D.A-AURA-macOS-Universal-AU-VST3.zip
+          archive: false
+          if-no-files-found: error
+
+      - name: Package the installer's pictures
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          if ls installer-pictures/*.png > /dev/null 2>&1; then
+            (cd installer-pictures && zip -q ../D.A-AURA-macOS-installer-pictures.zip *.png)
+          fi
+
+      - name: Upload the installer's pictures
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          path: D.A-AURA-macOS-installer-pictures.zip
+          archive: false
+          if-no-files-found: warn

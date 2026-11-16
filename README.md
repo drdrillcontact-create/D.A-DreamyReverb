@@ -1,9 +1,9 @@
 # D.A AURA
 
-A lush, shimmering, modulated reverb plugin built with JUCE 8.
+A lush, shimmering, modulated reverb plug-in by **D.A Production**, built with JUCE 9.0.5.
 
-* **Windows 64-bit:** VST3 (`D.A AURA.vst3`)
-* **macOS (Universal: Apple Silicon + Intel):** AU (`D.A AURA.component`) and VST3 (`D.A AURA.vst3`)
+* **Windows 64-bit:** VST3 (`D.A AURA.vst3`) + `D.A AURA Installer.exe`
+* **macOS Universal (Apple Silicon + Intel):** AU (`D.A AURA.component`) and VST3 (`D.A AURA.vst3`) + `D.A AURA Installer.app`
 
 ## Interface
 
@@ -32,41 +32,48 @@ Double-click a knob to reset it to its default value.
 
 1. Push to GitHub; the **Build D.A AURA** workflow starts automatically (or run it manually via **Actions -> Build D.A AURA -> Run workflow**).
 2. Download the build artifacts at the bottom of the workflow run:
-   * `DA-AURA-Windows-x64-Installer` (`D.A AURA Installer.exe`)
-   * `DA-AURA-macOS-Installer` (`D.A AURA Installer.dmg` -> `D.A AURA Installer.app`)
+   * `D.A-AURA-Windows-Installer.zip` (`D.A AURA Installer.exe`)
+   * `D.A-AURA-macOS-Installer.zip` (`D.A AURA Installer.app`)
+   * `D.A-AURA-Windows-x64-VST3.zip` (`D.A AURA.vst3`)
+   * `D.A-AURA-macOS-Universal-AU-VST3.zip` (`D.A AURA.component` + `D.A AURA.vst3`)
 
 ## Install
 
-**Windows:** extract and run `D.A AURA Installer.exe`. The self-contained borderless installer
-uses the exact `1737 x 664` D.A Production installer UI with octagonal corners and embeds the
-complete `D.A AURA.vst3` bundle inside the `.exe`. Click **Next** to install to
-`C:\Program Files\Common Files\VST3\D.A AURA.vst3`, then restart or rescan your DAW.
+**Windows:** extract `D.A-AURA-Windows-Installer.zip` and run **`D.A AURA Installer.exe`**. It asks for
+administrator privileges, opens the borderless D.A Production installer window (`980 x 386` logical units,
+resizable with fixed proportions, octagonal frame), lets you review the VST3 target
+(`C:\Program Files\Common Files\VST3`), and installs `D.A AURA.vst3`.
 
-**macOS:** open `D.A AURA Installer.dmg` and run `D.A AURA Installer.app`. The self-contained
-borderless installer uses the exact `1737 x 664` D.A Production installer UI with octagonal
-corners and embeds both Universal `D.A AURA.vst3` and `D.A AURA.component` bundles inside the
-`.app`. Click **Next** to install both formats to `~/Library/Audio/Plug-Ins/`, then restart or
-rescan your DAW.
+**macOS:** extract `D.A-AURA-macOS-Installer.zip` and open **`D.A AURA Installer.app`**. It opens the
+same borderless D.A Production installer window, lets you select **Audio Unit**
+(`~/Library/Audio/Plug-Ins/Components`) and/or **VST3** (`~/Library/Audio/Plug-Ins/VST3`), and installs
+the Universal (`arm64` + `x86_64`) bundles.
+
+Both installers also support `--silent` (headless installation into the standard folders).
 
 ## Build locally
 
-```
+```sh
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
-Results are in `build/DAAURA_artefacts/Release/`.
+Plug-in bundles are written to `build/DAAURA_artefacts/Release/`, and the installer is written to
+`build/DAAURAInstaller_artefacts/Release/`.
 
 ## Layout
 
 ```
-CMakeLists.txt                 build setup (fetches JUCE 8.0.4)
+CMakeLists.txt                 JUCE 9.0.5 build setup for DAAURA and DAAURAInstaller
 Source/AuraDSP.h               the reverb algorithm (plain C++)
 Source/PluginProcessor.*       parameters, state, audio callback
-Source/PluginEditor.*          user interface
-Design/aurora-design.png       the approved look of the plugin
-Installer/                     self-contained Windows & macOS installers + artwork
-.github/workflows/build.yml    CI for Windows and macOS
+Source/PluginEditor.*          plug-in user interface
+Design/aurora-design.png       plug-in UI preview
+Installer/Design/              master installer design (Installer.png) and asset generator
+Installer/Assets/              built-in installer artwork, patches, icon, and Red Hat Display fonts
+Installer/Source/              JUCE cross-platform installer (Windows & macOS)
+Tests/                         headless Linux JUCE harness for the installer
+.github/workflows/build.yml    Windows & macOS CI build, pluginval, auval, and live installer verification
 ```
 
-Note: JUCE is dual licensed (AGPLv3 or commercial). Check the JUCE licence before selling the plugin.
+Note: JUCE is dual licensed (AGPLv3 or commercial). Check the JUCE licence before selling the plug-in.

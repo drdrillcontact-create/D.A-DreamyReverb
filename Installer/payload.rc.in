@@ -1,0 +1,3 @@
+// Links the zip of the built VST3 plug-in into D.A AURA Installer.exe as a raw resource
+// (RT_RCDATA), so that the installer is a single .exe with nothing beside it.
+DAAURA_PAYLOAD RCDATA "@DAAURA_PAYLOAD_RC_PATH@"
