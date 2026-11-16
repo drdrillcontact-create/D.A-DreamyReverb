@@ -51,6 +51,13 @@ the Universal (`arm64` + `x86_64`) bundles.
 
 Both installers also support `--silent` (headless installation into the standard folders).
 
+## Reusing this installer for another plug-in
+
+`Docs/INSTALLER_PROMPT_EN.md`, `Docs/INSTALLER_PROMPT_FA.md` (Persian) and
+`Docs/INSTALLER_PROMPT_SHORT.md` hold the ready-made prompt to give an agent: hand it the
+design picture plus three lines of names, and it ports this installer to another D.A
+Production plug-in with the same look, behaviour and CI checks.
+
 ## Build locally
 
 ```sh
