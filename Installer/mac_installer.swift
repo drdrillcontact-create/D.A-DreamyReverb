@@ -112,7 +112,7 @@ private final class InstallerView: NSView {
         image.draw(in: bounds, from: NSRect(origin: .zero, size: image.size),
                    operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
-    private func hit(_ point: NSPoint) -> Int {
+    func hit(_ point: NSPoint) -> Int {
         guard bounds.width > 0 && bounds.height > 0 else { return 0 }
         let x = point.x * artWidth / bounds.width, y = point.y * artHeight / bounds.height
         if x >= 716 && x <= 1049 && y >= 453 && y <= 514 { return 1 }
@@ -140,12 +140,6 @@ private final class InstallerView: NSView {
         if action == 2 || action == 3 { NSApp.terminate(nil); return }
         if action == 4 { window?.miniaturize(nil); return }
         guard action == 1 else { return }
-        let confirm = NSAlert()
-        confirm.messageText = "Install D.A AURA?"
-        confirm.informativeText = "The included AU and VST3 plug-ins will be installed for the current user."
-        confirm.addButton(withTitle: "Install")
-        confirm.addButton(withTitle: "Cancel")
-        guard confirm.runModal() == .alertFirstButtonReturn else { return }
         do {
             let root = fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Audio/Plug-Ins", isDirectory: true)
             try installPlugins(in: root)
@@ -190,6 +184,41 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
 
+// Exercise the real borderless view and its button regions at two sizes.
+private func testWindow() -> Bool {
+    _ = NSApplication.shared
+    guard let url = Bundle.main.url(forResource: "welcome", withExtension: "png"),
+          let image = NSImage(contentsOf: url), let data = try? Data(contentsOf: url),
+          let reference = NSBitmapImageRep(data: data) else { return false }
+    for width: CGFloat in [artWidth, artWidth / 2] {
+        let height = floor(width * artHeight / artWidth)
+        let frame = NSRect(x: 0, y: 0, width: width, height: height)
+        let window = InstallerWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+        let view = InstallerView(image: image, frame: frame)
+        window.contentView = view
+        for (x, y, action) in [(850.0, 480.0, 1), (1200.0, 480.0, 2), (1420.0, 30.0, 3), (1365.0, 30.0, 4)] {
+            if view.hit(NSPoint(x: x * width / artWidth, y: y * height / artHeight)) != action { return false }
+        }
+        guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        if width == artWidth {
+            for (x, y) in [(100, 30), (500, 200), (500, 350), (750, 480), (1200, 480), (1400, 530)] {
+                guard let a = reference.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                      let b = bitmap.colorAt(x: x * bitmap.pixelsWide / reference.pixelsWide,
+                                             y: y * bitmap.pixelsHigh / reference.pixelsHigh)?.usingColorSpace(.deviceRGB) else { return false }
+                if abs(a.redComponent - b.redComponent) > 0.30 ||
+                   abs(a.greenComponent - b.greenComponent) > 0.30 ||
+                   abs(a.blueComponent - b.blueComponent) > 0.30 {
+                    fputs("Rendered pixel mismatch at \(x),\(y): \(a) vs \(b)\n", stderr)
+                    return false
+                }
+            }
+        }
+        window.close()
+    }
+    return true
+}
+
 // Non-interactive checks used on the actual packaged, relocated application.
 let args = CommandLine.arguments
 if args.count > 1 && args[1] == "--verify-payload" {
@@ -199,6 +228,7 @@ if args.count == 3 && args[1] == "--test-install-root" {
     do { try installPlugins(in: URL(fileURLWithPath: args[2], isDirectory: true)); exit(0) }
     catch { fputs("\(error)\n", stderr); exit(1) }
 }
+if args.count > 1 && args[1] == "--test-window" { exit(testWindow() ? 0 : 1) }
 if args.count > 1 && args[1] == "--test-layout" {
     for available in [CGSize(width: 1920, height: 1080), CGSize(width: 1024, height: 768), CGSize(width: 800, height: 500)] {
         let size = fittedSize(available)

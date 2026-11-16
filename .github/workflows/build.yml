@@ -70,6 +70,22 @@ jobs:
           if ($test.ExitCode -ne 0) { throw 'Embedded installer payload verification failed' }
           $render = Start-Process -FilePath (Join-Path $isolated 'D.A AURA Installer.exe') -ArgumentList '--test-render' -WorkingDirectory $isolated -Wait -PassThru
           if ($render.ExitCode -ne 0) { throw 'Installer DPI rendering test failed' }
+          $window = Start-Process -FilePath (Join-Path $isolated 'D.A AURA Installer.exe') -ArgumentList '--test-window' -WorkingDirectory $isolated -Wait -PassThru
+          if ($window.ExitCode -ne 0) { throw 'Installer window rendering or hit test failed' }
+          $testRoot = Join-Path $isolated 'installed'
+          for ($i = 0; $i -lt 2; $i++) {
+            $install = Start-Process -FilePath (Join-Path $isolated 'D.A AURA Installer.exe') -ArgumentList @('--test-install-root', "`"$testRoot`"") -WorkingDirectory $isolated -Wait -PassThru
+            if ($install.ExitCode -ne 0) { throw 'Installer extraction test failed' }
+          }
+          $source = (Get-Item 'staging/D.A AURA.vst3').FullName
+          $target = Join-Path $testRoot 'D.A AURA.vst3'
+          Get-ChildItem $source -File -Recurse | ForEach-Object {
+            $relative = $_.FullName.Substring($source.Length + 1)
+            $installed = Join-Path $target $relative
+            if (!(Test-Path -LiteralPath $installed) -or (Get-FileHash -LiteralPath $_.FullName).Hash -ne (Get-FileHash -LiteralPath $installed).Hash) {
+              throw "Installed file does not match: $relative"
+            }
+          }
           python Installer/verify_payload.py (Join-Path $isolated 'D.A AURA Installer.exe') 'staging/D.A AURA.vst3'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -120,6 +136,7 @@ jobs:
           executable="$isolated/D.A AURA Installer.app/Contents/MacOS/DAAURAInstaller"
           run_checked "$executable" --verify-payload
           run_checked "$executable" --test-layout
+          run_checked "$executable" --test-window
           run_checked "$executable" --test-install-root "$isolated/installed"
           run_checked "$executable" --test-install-root "$isolated/installed"
           run_checked diff -r "$app/Contents/Resources/payload/D.A AURA.vst3" "$isolated/installed/VST3/D.A AURA.vst3"

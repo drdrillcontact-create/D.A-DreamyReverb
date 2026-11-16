@@ -64,12 +64,16 @@ void extractFile(const PayloadFile& file, const fs::path& root) {
     }
 }
 
-fs::path installPlugin() {
+fs::path standardPluginDirectory() {
     PWSTR common = nullptr;
     HRESULT hr = SHGetKnownFolderPath(FOLDERID_ProgramFilesCommon, 0, nullptr, &common);
     if (FAILED(hr)) throw std::runtime_error("Cannot find the common Program Files folder");
     fs::path directory = fs::path(common) / L"VST3";
     CoTaskMemFree(common);
+    return directory;
+}
+
+fs::path installPlugin(const fs::path& directory) {
     fs::create_directories(directory);
     const fs::path target = directory / L"D.A AURA.vst3";
     const fs::path stage = uniquePath(directory);
@@ -118,11 +122,10 @@ void activate(HWND hwnd, int action) {
     if (action == 2 || action == 3) { DestroyWindow(hwnd); return; }
     if (action == 4) { ShowWindow(hwnd, SW_MINIMIZE); return; }
     if (action != 1) return;
-    if (MessageBoxW(hwnd, L"Install D.A AURA to the standard VST3 folder?\n\nThe installer contains the complete plugin.", L"D.A AURA", MB_OKCANCEL | MB_ICONQUESTION) != IDOK) return;
     installing = true;
     SetCursor(LoadCursor(nullptr, IDC_WAIT));
     try {
-        fs::path target = installPlugin();
+        fs::path target = installPlugin(standardPluginDirectory());
         std::wstring message = L"Installation complete:\n\n" + target.wstring() + L"\n\nRestart or rescan your DAW to find the plugin.";
         MessageBoxW(hwnd, message.c_str(), L"D.A AURA", MB_OK | MB_ICONINFORMATION);
         DestroyWindow(hwnd);
@@ -193,6 +196,12 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         drawArtwork(graphics, r.right, r.bottom);
         EndPaint(hwnd, &ps); return 0;
     }
+    case WM_PRINTCLIENT: {
+        RECT r; GetClientRect(hwnd, &r);
+        Gdiplus::Graphics graphics(reinterpret_cast<HDC>(wParam));
+        drawArtwork(graphics, r.right, r.bottom);
+        return 0;
+    }
     case WM_ERASEBKGND: return 1;
     case WM_LBUTTONDOWN:
         pressed = hitTest(hwnd, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
@@ -219,6 +228,51 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
+// Exercise the actual borderless window, its client rendering and button hit areas.
+bool testWindow(const wchar_t* className) {
+    for (int width : {artWidth, artWidth / 2}) {
+        const int height = MulDiv(width, artHeight, artWidth);
+        HWND hwnd = CreateWindowExW(0, className, L"D.A AURA Installer", WS_POPUP,
+                                    0, 0, width, height, nullptr, nullptr, instance, nullptr);
+        if (!hwnd) return false;
+        RECT client = {}; GetClientRect(hwnd, &client);
+        bool ok = client.right == width && client.bottom == height &&
+                  hitTest(hwnd, MulDiv(850, width, artWidth), MulDiv(480, height, artHeight)) == 1 &&
+                  hitTest(hwnd, MulDiv(1200, width, artWidth), MulDiv(480, height, artHeight)) == 2 &&
+                  hitTest(hwnd, MulDiv(1420, width, artWidth), MulDiv(30, height, artHeight)) == 3 &&
+                  hitTest(hwnd, MulDiv(1365, width, artWidth), MulDiv(30, height, artHeight)) == 4;
+        HDC dc = CreateCompatibleDC(nullptr);
+        BITMAPINFO info = {};
+        info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        info.bmiHeader.biWidth = width; info.bmiHeader.biHeight = -height;
+        info.bmiHeader.biPlanes = 1; info.bmiHeader.biBitCount = 32; info.bmiHeader.biCompression = BI_RGB;
+        void* bits = nullptr;
+        HBITMAP dib = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (!dc || !dib || !bits) ok = false;
+        HGDIOBJ old = dib ? SelectObject(dc, dib) : nullptr;
+        if (ok) {
+            SendMessageW(hwnd, WM_PRINTCLIENT, reinterpret_cast<WPARAM>(dc), PRF_CLIENT);
+            Gdiplus::Bitmap expected(width, height, PixelFormat32bppARGB);
+            { Gdiplus::Graphics graphics(&expected); drawArtwork(graphics, width, height); }
+            for (int y : {30, 200, 350, 480, 530}) for (int x : {100, 500, 800, 1200, 1400}) {
+                const int dx = MulDiv(x, width, artWidth), dy = MulDiv(y, height, artHeight);
+                Gdiplus::Color reference;
+                COLORREF actual = GetPixel(dc, dx, dy);
+                if (expected.GetPixel(dx, dy, &reference) != Gdiplus::Ok || actual == CLR_INVALID ||
+                    std::abs(int(reference.GetRed()) - int(GetRValue(actual))) > 5 ||
+                    std::abs(int(reference.GetGreen()) - int(GetGValue(actual))) > 5 ||
+                    std::abs(int(reference.GetBlue()) - int(GetBValue(actual))) > 5) ok = false;
+            }
+        }
+        if (old) SelectObject(dc, old);
+        if (dib) DeleteObject(dib);
+        if (dc) DeleteDC(dc);
+        DestroyWindow(hwnd);
+        if (!ok) return false;
+    }
+    return true;
+}
+
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR commandLine, int show) {
@@ -231,6 +285,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR commandLine, int show)
         }
         return 0;
     }
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv && argc == 3 && wcscmp(argv[1], L"--test-install-root") == 0) {
+        int result = 0;
+        try { installPlugin(fs::path(argv[2])); } catch (...) { result = 1; }
+        LocalFree(argv);
+        return result;
+    }
+    if (argv) LocalFree(argv);
     Gdiplus::GdiplusStartupInput input;
     ULONG_PTR token = 0;
     if (Gdiplus::GdiplusStartup(&token, &input, nullptr) != Gdiplus::Ok) return 1;
@@ -251,6 +314,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR commandLine, int show)
     WNDCLASSW wc = {}; wc.lpfnWndProc = windowProc; wc.hInstance = instance;
     wc.lpszClassName = L"DAAURAInstaller"; wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     RegisterClassW(&wc);
+    if (commandLine && wcscmp(commandLine, L"--test-window") == 0) {
+        const bool ok = testWindow(wc.lpszClassName);
+        delete artwork; artworkStream->Release(); Gdiplus::GdiplusShutdown(token);
+        return ok ? 0 : 3;
+    }
     RECT work; SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
     int width = std::min(artWidth, std::max(1, static_cast<int>(work.right - work.left - 32)));
     int height = MulDiv(width, artHeight, artWidth);

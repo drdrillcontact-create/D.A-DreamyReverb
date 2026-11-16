@@ -54,7 +54,7 @@ JUCE is downloaded automatically by CMake, nothing else is needed.
 
 **Windows:** extract `D.A AURA Installer.exe` from the downloaded Actions artifact
 and run it. The EXE contains the complete VST3 bundle: it can be copied to the desktop or
-sent on its own, without the ZIP or a separate plugins folder. Click Next and confirm to
+sent on its own, without the ZIP or a separate plugins folder. Click Next to
 install to `C:\Program Files\Common Files\VST3\D.A AURA.vst3`. Windows asks for
 administrator permission. The installer is not code-signed, so Windows SmartScreen may
 show a warning. Restart or rescan the DAW after installation.
