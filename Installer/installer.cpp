@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <windowsx.h>
+#include <objidl.h>
 #include <gdiplus.h>
 #include <shlobj.h>
 #include <shlwapi.h>
