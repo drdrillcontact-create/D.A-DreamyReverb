@@ -110,7 +110,8 @@ if(WIN32 OR APPLE)
     # pages (made from Installer/Design/Installer.png by Installer/Design/make-assets.py), and
     # the Red Hat Display typefaces used on those pages: compiled into the installer.
     juce_add_binary_data(DAAURAInstallerData
-        NAMESPACE InstallerData
+        HEADER_NAME InstallerData.h
+        NAMESPACE   InstallerData
         SOURCES
             Installer/Assets/picture.png
             Installer/Assets/patchText.png
