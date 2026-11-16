@@ -139,12 +139,12 @@ void AuroraLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
 //==============================================================================
 // The aurora behind the knobs.
 //
-// At rest the picture is the design's own: a dark field with faint ribbons and a few stars.
-// When the plug-in carries a signal the whole field answers it (see Reverb::Life): the level
-// lifts the ribbons and makes them travel, the sixteen bands of the spectrum set the stars'
-// brightness and drift from the low ones on the left to the high ones on the right, and every
-// onset that the signal's envelope reports sends a ring of light outward from the middle.
-// The motion is scaled by the "aurora" setting of the window, so it can be set to still.
+// At rest the picture is the design's own: a dark field with soft ribbons of green and blue
+// light lying across the lower half, a few stars above them. When the plug-in carries a signal
+// the whole field answers it (see Reverb::Life): the level lifts the ribbons and makes them
+// travel, the sixteen bands of the spectrum set the stars' brightness and drift from the low
+// ones on the left to the high ones on the right, and every onset that the signal's envelope
+// reports sends a ring of light outward from the middle.
 AuroraField::AuroraField()
 {
     setInterceptsMouseClicks (false, false);
@@ -153,31 +153,47 @@ AuroraField::AuroraField()
 
     using namespace aurora_colours;
 
-    const juce::Colour palette[] = { green, blue, purple, green, blue };
+    // The ribbons are the design's own light: wide, soft, and living in the lower part of the
+    // window (the top stays dark, which is what makes the knobs read).
+    struct Shape { float height, tilt, amplitude, thickness, alpha; };
+    const Shape shapes[] =
+    {
+        //  height  tilt   amp  thick  alpha
+        {   0.30f, -0.16f, 14.0f, 132.0f, 0.30f },   // the wide green band across the middle
+        {   0.42f,  0.10f, 18.0f, 104.0f, 0.24f },   // and the blue one that follows it
+        {   0.58f, -0.07f, 12.0f,  76.0f, 0.21f },
+        {   0.74f,  0.05f, 16.0f, 112.0f, 0.22f },
+        {   0.20f, -0.03f,  9.0f,  54.0f, 0.14f },   // a faint one higher up
+        {   0.90f,  0.02f, 20.0f,  92.0f, 0.16f },
+        {   0.50f,  0.03f, 10.0f,  44.0f, 0.12f },
+    };
+
+    const juce::Colour palette[] = { green, blue, green, blue, purple, green, blue };
+    juce::Random random (0x0a17a);
 
     for (size_t i = 0; i < ribbons.size(); ++i)
     {
         auto& r = ribbons[i];
-        const float t = (float) i / (float) (ribbons.size() - 1);
+        const auto& shape = shapes[i % (sizeof (shapes) / sizeof (shapes[0]))];
 
-        r.phase     = t * 5.3f + 0.7f;
-        r.speed     = 0.05f + 0.03f * (float) ((i * 7) % 5);
-        r.height    = 0.20f + 0.60f * t;
-        r.thickness = 18.0f + 30.0f * (float) ((i * 3) % 4) * 0.33f;
-        r.amp       = 10.0f + 22.0f * (float) ((i * 5) % 3);
-        r.colour    = palette[i % 5];
-        r.alpha     = 0.05f + 0.035f * t;
+        r.phase     = random.nextFloat() * juce::MathConstants<float>::twoPi;
+        r.speed     = 0.05f + 0.04f * random.nextFloat();
+        r.height    = shape.height;
+        r.thickness = shape.thickness;
+        r.amp       = shape.amplitude;
+        r.tilt      = shape.tilt;
+        r.colour    = palette[i % (sizeof (palette) / sizeof (palette[0]))];
+        r.alpha     = shape.alpha;
+
     }
-
-    juce::Random random (0x0a17a);
 
     for (size_t i = 0; i < stars.size(); ++i)
     {
         auto& s = stars[i];
         s.x       = random.nextFloat();
-        s.y       = std::pow (random.nextFloat(), 1.7f);      // (denser towards the top)
-        s.size    = 0.6f + 1.8f * random.nextFloat();
-        s.alpha   = 0.10f + 0.55f * random.nextFloat();
+        s.y       = std::pow (random.nextFloat(), 2.4f) * 0.62f;   // (only in the dark top)
+        s.size    = 0.5f + 1.5f * random.nextFloat();
+        s.alpha   = 0.06f + 0.30f * random.nextFloat();
         s.twinkle = random.nextFloat() * juce::MathConstants<float>::twoPi;
         s.drift   = 0.4f + 0.9f * random.nextFloat();
     }
@@ -188,6 +204,9 @@ AuroraField::AuroraField()
         r.alpha  = 0.0f;
         r.width  = 1.0f;
     }
+
+    buildAuroraImage (restImage,  0.0f);
+    buildAuroraImage (awakeImage, 1.0f);
 }
 
 void AuroraField::moveTo (const aura::Reverb::Life& l, double secondsSinceLastMove)
@@ -225,7 +244,7 @@ void AuroraField::moveTo (const aura::Reverb::Life& l, double secondsSinceLastMo
         ring.alpha  *= std::pow (0.35f, dt);
     }
 
-    // the ribbons travel with the signal, and their light follows it
+    // the ribbons travel with the signal
     const float timeStep = dt * (0.25f + 2.2f * level) * motion;
     time += timeStep;
 
@@ -233,6 +252,67 @@ void AuroraField::moveTo (const aura::Reverb::Life& l, double secondsSinceLastMo
         r.phase += timeStep * r.speed * 6.0f;
 
     repaint();
+}
+
+// The aurora, drawn small and blurred once: the design's own soft light for the rest state,
+// and a fuller, wider one for a signal. Drawing it at a sixth of the size and stretching it
+// back up is what gives it the design's haze (and costs nothing at every refresh).
+void AuroraField::buildAuroraImage (juce::Image& target, float strength) const
+{
+    // the signal's picture is the same light, one phase further on: it is what travels
+    const float phaseShift = 2.4f * strength;
+
+    constexpr float s = 1.0f / 3.0f;
+    const int w = juce::roundToInt ((float) DAAuraAudioProcessorEditor::baseWidth * s);
+    const int h = juce::roundToInt ((float) DAAuraAudioProcessorEditor::baseHeight * s);
+
+    target = juce::Image (juce::Image::ARGB, w, h, true);
+    juce::Graphics g (target);
+
+    for (const auto& r : ribbons)
+    {
+        // the design's ribbons lie low and lean a little; a signal lifts them and widens them
+        const float height = juce::jlimit (0.05f, 0.98f,
+                                           r.height + 0.16f * strength * (0.5f - r.height));
+        const float alpha  = r.alpha * (0.92f + 0.10f * strength);
+        const float amp    = r.amp   * (0.55f + 1.9f * strength);
+
+        juce::Path path;
+
+        for (int x = -12; x <= w + 12; x += 6)
+        {
+            const float t = (float) x / (float) w;
+            const float y = height * (float) h
+                          + (t - 0.5f) * r.tilt * (float) h
+                          + std::sin (r.phase + phaseShift + t * 4.1f) * amp * s
+                          + std::sin (r.phase * 1.9f + phaseShift * 0.7f + t * 9.0f) * amp * 0.25f * s;
+
+            if (x <= -12)
+                path.startNewSubPath ((float) x, y);
+            else
+                path.lineTo ((float) x, y);
+        }
+
+        // its light fades in from the left and out before the right edge: a gradient across
+        // the whole picture, which is only ever used once (the picture is finished here)
+        juce::ColourGradient gradient (r.colour.withAlpha (0.0f), 0.0f, 0.0f,
+                                       r.colour.withAlpha (0.0f), (float) w, 0.0f, false);
+        gradient.addColour (0.02, r.colour.withAlpha (0.0f));
+        gradient.addColour (0.20, r.colour.withAlpha (alpha * 0.65f));
+        gradient.addColour (0.40, r.colour.withAlpha (alpha));
+        gradient.addColour (0.68, r.colour.withAlpha (alpha * 0.55f));
+        gradient.addColour (0.90, r.colour.withAlpha (alpha * 0.10f));
+        gradient.addColour (1.00, r.colour.withAlpha (0.0f));
+
+        g.setGradientFill (gradient);
+        g.strokePath (path, juce::PathStrokeType ((r.thickness * (1.0f + 0.30f * strength)) * s * 1.35f,
+                                                  juce::PathStrokeType::curved,
+                                                  juce::PathStrokeType::rounded));
+    }
+
+    juce::ImageConvolutionKernel blur (17);
+    blur.createGaussianBlur (2.6f);
+    blur.applyToImage (target, target, target.getBounds());
 }
 
 juce::ColourGradient AuroraField::backdrop()
@@ -272,66 +352,38 @@ void AuroraField::paint (juce::Graphics& g)
     g.setGradientFill (backdrop());
     g.fillAll();
 
-    // the ribbons: the design's three, plus the ones the signal brings out of the dark
-    const int lit = juce::jlimit (0, (int) ribbons.size() - 1, juce::roundToInt (1.0f + 5.0f * level));
+    // the aurora's own light: the design's rest picture, and the fuller one a signal brings,
+    // blended by the level (both are drawn small and stretched, so they stay soft)
+    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
 
-    for (int i = 0; i < (int) ribbons.size(); ++i)
+    const float awake = juce::jlimit (0.0f, 1.0f, level * 1.15f);
+
+    if (restImage.isValid())
     {
-        auto& r = ribbons[(size_t) i];
-        const bool awake = i < lit;
-
-        if (! awake && r.alpha * 0.4f < 0.004f)
-            continue;
-
-        juce::Path path;
-        const float baseY = r.height * h;
-        const float step = w / 64.0f;
-        path.startNewSubPath (-step, baseY + std::sin (r.phase) * r.amp * (0.4f + level));
-
-        for (float x = 0.0f; x <= w + step; x += step)
-        {
-            const float t = x / juce::jmax (1.0f, w);
-            const float y = baseY
-                          + std::sin (r.phase + t * 5.4f) * r.amp * (0.4f + 1.6f * level)
-                          + std::sin (r.phase * 1.7f + t * 11.0f) * r.amp * 0.3f;
-            path.lineTo (x, y);
-        }
-
-        juce::ColourGradient gradient (r.colour.withAlpha (0.0f), 0.0f, 0.0f,
-                                       r.colour.withAlpha (0.0f), w, 0.0f, false);
-        const float glow = awake ? r.alpha * (0.45f + 1.0f * level + 0.30f * delayLevel) : r.alpha * 0.35f;
-        gradient.addColour (0.30, r.colour.withAlpha (glow));
-        gradient.addColour (0.70, r.colour.withAlpha (glow * 0.75f));
-
-        g.setGradientFill (gradient);
-
-        // three widths, each one dimmer than the one inside it: light, not a painted band
-        const float thickness = r.thickness * fieldScale * (1.0f + 0.35f * level);
-        for (const auto [width, share] : { std::pair<float, float> { 2.6f, 0.22f },
-                                           std::pair<float, float> { 1.4f, 0.38f },
-                                           std::pair<float, float> { 0.7f, 1.0f } })
-        {
-            g.setOpacity (share);
-            g.strokePath (path, juce::PathStrokeType (thickness * width,
-                                                      juce::PathStrokeType::curved,
-                                                      juce::PathStrokeType::rounded));
-        }
-
-        g.setOpacity (1.0f);
+        g.setOpacity (1.0f - 0.30f * awake);
+        g.drawImage (restImage, area, juce::RectanglePlacement::stretchToFit);
     }
+
+    if (awakeImage.isValid() && awake > 0.01f)
+    {
+        g.setOpacity (0.42f * awake);
+        g.drawImage (awakeImage, area, juce::RectanglePlacement::stretchToFit);
+    }
+
+    g.setOpacity (1.0f);
 
     // the light sits in the middle of the window and fades away towards its top and bottom,
     // so that the aurora is a glow behind the knobs and never a painted band across them
     {
-        juce::ColourGradient fade (bgTop.withAlpha (0.85f), 0.0f, 0.0f,
+        juce::ColourGradient fade (bgTop.withAlpha (0.55f), 0.0f, 0.0f,
                                    bgTop.withAlpha (0.0f), 0.0f, h * 0.42f, false);
-        fade.addColour (0.60, bgTop.withAlpha (0.10f));
+        fade.addColour (0.60, bgTop.withAlpha (0.06f));
         fade.addColour (1.0, bgTop.withAlpha (0.0f));
         g.setGradientFill (fade);
         g.fillRect (0.0f, 0.0f, w, h * 0.42f);
 
         juce::ColourGradient lower (bgBottom.withAlpha (0.0f), 0.0f, h * 0.55f,
-                                    bgBottom.withAlpha (0.80f), 0.0f, h, false);
+                                    bgBottom.withAlpha (0.55f), 0.0f, h, false);
         g.setGradientFill (lower);
         g.fillRect (0.0f, h * 0.55f, w, h * 0.45f);
     }
@@ -414,6 +466,14 @@ DAAuraAudioProcessorEditor::DAAuraAudioProcessorEditor (DAAuraAudioProcessor& p)
     freezeButton.setMouseCursor (juce::MouseCursor::PointingHandCursor);
     addAndMakeVisible (freezeButton);
     freezeAttachment = std::make_unique<ButtonAttachment> (proc.apvts, "freeze", freezeButton);
+
+    // the product's name, in front of the aurora (it used to be painted by the editor itself,
+    // which the field then covered)
+    title.setText ("D.A AURA", juce::dontSendNotification);
+    title.setJustificationType (juce::Justification::centredLeft);
+    title.setInterceptsMouseClicks (false, false);
+    title.setColour (juce::Label::textColourId, aurora_colours::text);
+    addAndMakeVisible (title);
 
     // the preset browser: the space, the preset, how far through the space it is, and the arrows
     const auto setUpLabel = [this] (juce::Label& label, float height, float kerning, bool bold)
@@ -547,11 +607,6 @@ void DAAuraAudioProcessorEditor::paint (juce::Graphics& g)
         g.fillAll();
     }
 
-    g.setColour (text);
-    g.setFont (makeFont (20.0f * scale, false, 0.38f));
-    g.drawText ("D.A AURA",
-                juce::Rectangle<float> (30.0f * scale, 22.0f * scale, 480.0f * scale, 32.0f * scale),
-                juce::Justification::centredLeft, false);
 }
 
 void DAAuraAudioProcessorEditor::resized()
@@ -567,6 +622,9 @@ void DAAuraAudioProcessorEditor::resized()
     {
         return r.transformedBy (juce::AffineTransform::scale (scale)).toNearestInt();
     };
+
+    title.setFont (makeFont (20.0f * scale, false, 0.38f));
+    title.setBounds (scaled ({ 30.0f, 22.0f, 480.0f, 32.0f }));
 
     presetSpace.setFont (makeFont (10.5f * scale, true, 0.30f));
     presetSpace.setBounds (scaled ({ 30.0f, 58.0f, 220.0f, 14.0f }));

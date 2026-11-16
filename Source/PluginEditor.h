@@ -62,6 +62,7 @@ private:
         float height = 0.0f;      // its line through the middle, 0..1 of the height
         float thickness = 1.0f;
         float amp = 0.0f;         // how far it wanders
+        float tilt = 0.0f;        // how far it leans across the window
         juce::Colour colour;
         float alpha = 0.0f;
     };
@@ -81,12 +82,17 @@ private:
 
     juce::ColourGradient backdrop();
 
+    /** The whole aurora, drawn at a sixth of the window's size and blurred once.
+        `strength` 0 draws the design's rest picture, 1 the one a full signal brings. */
+    void buildAuroraImage (juce::Image& target, float strength) const;
+
     float fieldScale = 1.0f;
     float level = 0.0f, transient = 0.0f, delayLevel = 0.0f;
     float band[aura::Reverb::Life::numBands] {};
     float time = 0.0f;
 
     std::array<Ribbon, 7> ribbons;
+    juce::Image restImage, awakeImage;
     std::array<Star, 96> stars;
     std::array<Ring, 4> rings;
     int nextRing = 0;
@@ -130,6 +136,9 @@ private:
     DAAuraAudioProcessor& proc;
     AuroraLookAndFeel lookAndFeel;
     AuroraField field;
+
+    // the product's name, drawn over the aurora (a label, so that it sits in front of the field)
+    juce::Label  title;
 
     // the preset browser: the space, the preset's name, and the arrows that step through it
     juce::Label  presetSpace;
