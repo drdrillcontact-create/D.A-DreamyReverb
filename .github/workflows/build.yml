@@ -2,7 +2,7 @@
 name: Build D.A AURA
 
 permissions:
-  contents: read
+  contents: write      # (a release is made from the artifacts of a run on the main branch)
 
 on:
   push:
@@ -336,3 +336,74 @@ jobs:
           path: D.A-AURA-macOS-installer-pictures.zip
           archive: false
           if-no-files-found: warn
+
+  # The files as they reach somebody: one place to download them from, that does not expire
+  # after ninety days and needs no GitHub account. The four files of the two jobs are put on a
+  # release that is named after the version in CMakeLists.txt (v1.0.0), and the release's files
+  # are replaced by the newest build of that version, so the link stays the same:
+  #
+  #   https://github.com/<owner>/<repo>/releases/latest
+  #
+  # (only a run on the main branch makes a release: a pull request's build does not)
+  release:
+    name: Put the files on a release
+    needs: [build-windows, build-macos]
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Read the version
+        id: version
+        run: echo "number=$(sed -n 's/^ *project *( *[A-Za-z0-9_]* *VERSION *\([0-9.]*\).*/\1/p' CMakeLists.txt | head -n 1)" >> "$GITHUB_OUTPUT"
+
+      - name: Collect the files
+        uses: actions/download-artifact@v5
+        with:
+          path: files
+          merge-multiple: true
+
+      - name: List what is being released
+        run: ls -la files
+
+      # The plug-in and its installer, for both systems, and the two pictures of the installer's
+      # windows (so that what is in them can be seen without running anything).
+      - name: Make the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          set -e
+          tag="v$VERSION"
+          name="D.A AURA $VERSION"
+
+          assets=(
+            "files/D.A-AURA-Windows-Installer.zip"
+            "files/D.A-AURA-Windows-x64-VST3.zip"
+            "files/D.A-AURA-macOS-Installer.zip"
+            "files/D.A-AURA-macOS-Universal-AU-VST3.zip"
+            "files/D.A-AURA-Windows-installer-pictures.zip"
+            "files/D.A-AURA-macOS-installer-pictures.zip"
+          )
+
+          for a in "${assets[@]}"; do
+            [ -f "$a" ] || { echo "::error title=A file is missing::The build did not produce $a"; exit 1; }
+          done
+
+          notes="D.A AURA $VERSION, built from $GITHUB_SHA.
+
+          **Windows 64-bit:** download \`D.A-AURA-Windows-Installer.zip\` and run \`D.A AURA Installer.exe\` (it asks for administrator rights). Or take \`D.A-AURA-Windows-x64-VST3.zip\` and copy \`D.A AURA.vst3\` into C:\Program Files\Common Files\VST3.
+
+          **macOS (Apple Silicon and Intel):** download \`D.A-AURA-macOS-Installer.zip\` and open \`D.A AURA Installer.app\`. Or take \`D.A-AURA-macOS-Universal-AU-VST3.zip\` and copy \`D.A AURA.component\` and \`D.A AURA.vst3\` into ~/Library/Audio/Plug-Ins/Components and ~/Library/Audio/Plug-Ins/VST3.
+
+          Both installers can also be run with \`--silent\`. The two \`-installer-pictures\` files hold the photographs the build takes of the installer's pages."
+
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+            gh release edit "$tag" --title "$name" --notes "$notes"
+          else
+            gh release create "$tag" "${assets[@]}" --title "$name" --notes "$notes" --target "$GITHUB_SHA"
+          fi
+
+          echo "::notice title=Released::https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag"
