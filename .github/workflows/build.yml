@@ -18,6 +18,11 @@ on:
         type: boolean
         required: false
         default: false
+      publish:
+        description: "Put the built files on a release (v<version>), for downloading without an account"
+        type: boolean
+        required: false
+        default: false
 
 env:
   # What the plug-in is called: DAAURA_PRODUCT_NAME in CMakeLists.txt. The files are named after it.
@@ -348,7 +353,7 @@ jobs:
   release:
     name: Put the files on a release
     needs: [build-windows, build-macos]
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || inputs.publish == true) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
