@@ -29,11 +29,12 @@ endif()
 
 juce_add_plugin(DreamyReverb
     COMPANY_NAME                "D.A"
+    # Keep the existing bundle/plugin IDs for compatibility with older projects.
     BUNDLE_ID                   "com.da.dreamyreverb"
     PLUGIN_MANUFACTURER_CODE    Drma
     PLUGIN_CODE                 Drvb
     FORMATS                     ${DREAMY_FORMATS}
-    PRODUCT_NAME                "D.A Dreamy Reverb"
+    PRODUCT_NAME                "D.A AURA"
     IS_SYNTH                    FALSE
     NEEDS_MIDI_INPUT            FALSE
     NEEDS_MIDI_OUTPUT           FALSE

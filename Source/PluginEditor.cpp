@@ -240,7 +240,7 @@ void DreamyReverbAudioProcessorEditor::paint (juce::Graphics& g)
 
     g.setColour (text);
     g.setFont (makeFont (20.0f * scale, false, 0.38f));
-    g.drawText ("D.A DREAMY REVERB",
+    g.drawText ("D.A AURA",
                 juce::Rectangle<float> (30.0f * scale, 22.0f * scale, 480.0f * scale, 32.0f * scale),
                 juce::Justification::centredLeft, false);
 }

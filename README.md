@@ -1,4 +1,4 @@
-# D.A Dreamy Reverb
+# D.A AURA
 
 A lush, shimmering, modulated reverb plugin built with JUCE 8.
 
@@ -37,33 +37,46 @@ Double-click a knob to reset it to its default value.
    ```
    git init
    git add .
-   git commit -m "Dreamy Reverb"
+   git commit -m "D.A AURA"
    git branch -M main
    git remote add origin https://github.com/<you>/<repo>.git
    git push -u origin main
    ```
-3. Open the **Actions** tab. The "Build D.A Dreamy Reverb" workflow starts on every push
+3. Open the **Actions** tab. The "Build D.A AURA" workflow starts on every push
    (you can also start it by hand with "Run workflow").
 4. When it finishes, download the artifacts at the bottom of the run page:
-   * `DreamyReverb-Windows-x64-VST3`
-   * `DreamyReverb-macOS-AU-VST3`
+   * `DA-AURA-Windows-x64-Installer`
+   * `DA-AURA-macOS-AU-VST3`
 
 JUCE is downloaded automatically by CMake, nothing else is needed.
 
 ## Install
 
-**Windows:** copy `D.A Dreamy Reverb.vst3` to `C:\Program Files\Common Files\VST3\`
+**Windows:** extract `D.A AURA Installer.exe` from the downloaded Actions artifact
+and run it. The EXE contains the complete VST3 bundle: it can be copied to the desktop or
+sent on its own, without the ZIP or a separate plugins folder. Click Next and confirm to
+install to `C:\Program Files\Common Files\VST3\D.A AURA.vst3`. Windows asks for
+administrator permission. The installer is not code-signed, so Windows SmartScreen may
+show a warning. Restart or rescan the DAW after installation.
 
-**macOS:** unzip `DreamyReverb-macOS.zip`, then copy
+The welcome artwork retains the D.A Production branding from the supplied reference.
+The installer installs D.A AURA, and the artwork scales to fit smaller screens while
+keeping the reference aspect ratio.
 
-* `D.A Dreamy Reverb.component` to `~/Library/Audio/Plug-Ins/Components/`
-* `D.A Dreamy Reverb.vst3` to `~/Library/Audio/Plug-Ins/VST3/`
+If an older `D.A Dreamy Reverb.vst3` bundle is installed, remove it after installing
+AURA to avoid duplicate plugin entries. The internal plugin IDs have been retained for
+compatibility, but existing DAW projects should be backed up and tested after the rename.
+
+**macOS:** unzip `DA-AURA-macOS.zip`, then copy
+
+* `D.A AURA.component` to `~/Library/Audio/Plug-Ins/Components/`
+* `D.A AURA.vst3` to `~/Library/Audio/Plug-Ins/VST3/`
 
 The macOS build is only ad-hoc signed (not notarized), so remove the download quarantine once:
 
 ```
-xattr -cr ~/Library/Audio/Plug-Ins/Components/"D.A Dreamy Reverb.component"
-xattr -cr ~/Library/Audio/Plug-Ins/VST3/"D.A Dreamy Reverb.vst3"
+xattr -cr ~/Library/Audio/Plug-Ins/Components/"D.A AURA.component"
+xattr -cr ~/Library/Audio/Plug-Ins/VST3/"D.A AURA.vst3"
 ```
 
 Then restart your DAW (Logic may need a rescan or a reboot to pick up the new AU).
@@ -85,6 +98,7 @@ Source/DreamyReverbDSP.h       the reverb algorithm (plain C++)
 Source/PluginProcessor.*       parameters, state, audio callback
 Source/PluginEditor.*          user interface
 Design/aurora-design.png       the approved look of the plugin
+Installer/                     self-contained Windows installer and reference artwork
 .github/workflows/build.yml    CI for Windows and macOS
 ```
 
