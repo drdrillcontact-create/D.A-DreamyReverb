@@ -3,6 +3,35 @@
 import argparse
 from pathlib import Path
 
+VERSION_RESOURCE = """\
+1 VERSIONINFO
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,0,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "D.A Production\\0"
+            VALUE "FileDescription", "D.A AURA Installer\\0"
+            VALUE "FileVersion", "1.0.0.0\\0"
+            VALUE "InternalName", "DAAURAInstaller\\0"
+            VALUE "OriginalFilename", "D.A AURA Installer.exe\\0"
+            VALUE "ProductName", "D.A AURA\\0"
+            VALUE "ProductVersion", "1.0.0.0\\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END"""
+
 
 def quote(value):
     return value.replace('\\', '\\\\').replace('"', '\\"')
@@ -23,10 +52,16 @@ def generate(bundle: Path, output: Path, artwork: Path, manifest: Path):
     if len(files) > 60000:
         raise ValueError('Too many files for Windows resource IDs')
     output.mkdir(parents=True, exist_ok=True)
-    resource = [f'1 24 "{manifest.resolve().as_posix()}"',
-                f'100 RCDATA "{artwork.resolve().as_posix()}"']
-    header = ['#pragma once', 'struct PayloadFile { int resourceId; const wchar_t* relativePath; };',
-              'static const PayloadFile payloadFiles[] = {']
+    resource = [
+        f'1 24 "{manifest.resolve().as_posix()}"',
+        VERSION_RESOURCE,
+        f'100 RCDATA "{artwork.resolve().as_posix()}"',
+    ]
+    header = [
+        '#pragma once',
+        'struct PayloadFile { int resourceId; const wchar_t* relativePath; };',
+        'static const PayloadFile payloadFiles[] = {',
+    ]
     for index, path in enumerate(files, 101):
         relative = path.relative_to(bundle)
         if any(part in ('.', '..') for part in relative.parts):

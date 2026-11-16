@@ -27,11 +27,11 @@ private:
 };
 
 //==============================================================================
-class DreamyReverbAudioProcessorEditor : public juce::AudioProcessorEditor
+class DAAuraAudioProcessorEditor : public juce::AudioProcessorEditor
 {
 public:
-    explicit DreamyReverbAudioProcessorEditor (DreamyReverbAudioProcessor&);
-    ~DreamyReverbAudioProcessorEditor() override;
+    explicit DAAuraAudioProcessorEditor (DAAuraAudioProcessor&);
+    ~DAAuraAudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -56,7 +56,7 @@ private:
     void addKnob (const juce::String& paramId, const juce::String& title, float cx, float cy, float radius);
     void buildAuroraImage();
 
-    DreamyReverbAudioProcessor& proc;
+    DAAuraAudioProcessor& proc;
     AuroraLookAndFeel lookAndFeel;
     juce::Image aurora;
 
@@ -64,5 +64,5 @@ private:
     juce::TextButton freezeButton { "FREEZE" };
     std::unique_ptr<ButtonAttachment> freezeAttachment;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DreamyReverbAudioProcessorEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DAAuraAudioProcessorEditor)
 };

@@ -1,9 +1,11 @@
 import importlib.util
 from pathlib import Path
+import struct
 import tempfile
 import unittest
 
-spec = importlib.util.spec_from_file_location('payload', Path(__file__).resolve().parents[1] / 'Installer/generate_payload.py')
+REPO_ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location('payload', REPO_ROOT / 'Installer/generate_payload.py')
 payload = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(payload)
 
@@ -34,6 +36,8 @@ class PayloadTests(unittest.TestCase):
         rc = (self.output / 'payload.rc').read_text()
         header = (self.output / 'payload.h').read_text()
         self.assertIn('1 24 ', rc)
+        self.assertIn('1 VERSIONINFO', rc)
+        self.assertIn('D.A AURA Installer', rc)
         self.assertIn('100 RCDATA ', rc)
         self.assertEqual(rc.count('RCDATA'), 3)
         self.assertIn('moduleinfo.json', header)
@@ -52,6 +56,15 @@ class PayloadTests(unittest.TestCase):
         self.art.unlink()
         with self.assertRaises(ValueError):
             self.generate()
+
+    def test_repository_welcome_artwork_matches_exact_installer_dimensions(self):
+        welcome = REPO_ROOT / 'Installer/welcome.png'
+        data = welcome.read_bytes()
+        self.assertEqual(data[:8], b'\x89PNG\r\n\x1a\n')
+        width, height, bit_depth, color_type = struct.unpack('>IIBB', data[16:26])
+        self.assertEqual((width, height), (1737, 664))
+        self.assertEqual(bit_depth, 8)
+        self.assertEqual(color_type, 6)  # RGBA with transparent octagonal corners
 
 
 if __name__ == '__main__':

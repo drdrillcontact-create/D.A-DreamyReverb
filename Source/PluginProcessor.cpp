@@ -34,7 +34,7 @@ namespace
     }
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout DreamyReverbAudioProcessor::createParameterLayout()
+juce::AudioProcessorValueTreeState::ParameterLayout DAAuraAudioProcessor::createParameterLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
@@ -53,7 +53,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout DreamyReverbAudioProcessor::
     return layout;
 }
 
-DreamyReverbAudioProcessor::DreamyReverbAudioProcessor()
+DAAuraAudioProcessor::DAAuraAudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
@@ -72,18 +72,18 @@ DreamyReverbAudioProcessor::DreamyReverbAudioProcessor()
     pFreeze   = apvts.getRawParameterValue ("freeze");
 }
 
-void DreamyReverbAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+void DAAuraAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     reverb.prepare (sampleRate);
     scratch.setSize (2, juce::jmax (1, samplesPerBlock), false, true, false);
 }
 
-void DreamyReverbAudioProcessor::reset()
+void DAAuraAudioProcessor::reset()
 {
     reverb.reset();
 }
 
-bool DreamyReverbAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+bool DAAuraAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     const auto in  = layouts.getMainInputChannelSet();
     const auto out = layouts.getMainOutputChannelSet();
@@ -94,7 +94,7 @@ bool DreamyReverbAudioProcessor::isBusesLayoutSupported (const BusesLayout& layo
     return in == juce::AudioChannelSet::mono() || in == juce::AudioChannelSet::stereo();
 }
 
-void DreamyReverbAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void DAAuraAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
 
@@ -105,7 +105,7 @@ void DreamyReverbAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     if (numSamples == 0 || numChannels == 0)
         return;
 
-    dreamy::Reverb::Params p;
+    aura::Reverb::Params p;
     p.mix      = pMix->load();
     p.size     = pSize->load();
     p.decay    = pDecay->load();
@@ -148,18 +148,18 @@ void DreamyReverbAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }
 }
 
-juce::AudioProcessorEditor* DreamyReverbAudioProcessor::createEditor()
+juce::AudioProcessorEditor* DAAuraAudioProcessor::createEditor()
 {
-    return new DreamyReverbAudioProcessorEditor (*this);
+    return new DAAuraAudioProcessorEditor (*this);
 }
 
-void DreamyReverbAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+void DAAuraAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     if (auto xml = apvts.copyState().createXml())
         copyXmlToBinary (*xml, destData);
 }
 
-void DreamyReverbAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+void DAAuraAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts.state.getType()))
@@ -168,5 +168,5 @@ void DreamyReverbAudioProcessor::setStateInformation (const void* data, int size
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new DreamyReverbAudioProcessor();
+    return new DAAuraAudioProcessor();
 }

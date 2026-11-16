@@ -1,13 +1,13 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "DreamyReverbDSP.h"
+#include "AuraDSP.h"
 
-class DreamyReverbAudioProcessor : public juce::AudioProcessor
+class DAAuraAudioProcessor : public juce::AudioProcessor
 {
 public:
-    DreamyReverbAudioProcessor();
-    ~DreamyReverbAudioProcessor() override = default;
+    DAAuraAudioProcessor();
+    ~DAAuraAudioProcessor() override = default;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -39,7 +39,7 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
 private:
-    dreamy::Reverb reverb;
+    aura::Reverb reverb;
     juce::AudioBuffer<float> scratch;
 
     std::atomic<float>* pMix = nullptr;
@@ -54,5 +54,5 @@ private:
     std::atomic<float>* pWidth = nullptr;
     std::atomic<float>* pFreeze = nullptr;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DreamyReverbAudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DAAuraAudioProcessor)
 };

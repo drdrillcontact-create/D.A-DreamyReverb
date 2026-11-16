@@ -2,8 +2,8 @@
 
 A lush, shimmering, modulated reverb plugin built with JUCE 8.
 
-* **Windows 64-bit:** VST3
-* **macOS (Universal: Apple Silicon + Intel):** AU and VST3
+* **Windows 64-bit:** VST3 (`D.A AURA.vst3`)
+* **macOS (Universal: Apple Silicon + Intel):** AU (`D.A AURA.component`) and VST3 (`D.A AURA.vst3`)
 
 ## Interface
 
@@ -30,52 +30,23 @@ Double-click a knob to reset it to its default value.
 
 ## Build with GitHub Actions
 
-1. Create a new repository on GitHub.
-2. Upload **everything** in this folder, including the hidden `.github` folder
-   (`.github/workflows/build.yml`). The easiest way:
-
-   ```
-   git init
-   git add .
-   git commit -m "D.A AURA"
-   git branch -M main
-   git remote add origin https://github.com/<you>/<repo>.git
-   git push -u origin main
-   ```
-3. Open the **Actions** tab. The "Build D.A AURA" workflow starts on every push
-   (you can also start it by hand with "Run workflow").
-4. When it finishes, download the artifacts at the bottom of the run page:
-   * `DA-AURA-Windows-x64-Installer`
-   * `DA-AURA-macOS-Installer`
-
-JUCE is downloaded automatically by CMake, nothing else is needed.
+1. Push to GitHub; the **Build D.A AURA** workflow starts automatically (or run it manually via **Actions -> Build D.A AURA -> Run workflow**).
+2. Download the build artifacts at the bottom of the workflow run:
+   * `DA-AURA-Windows-x64-Installer` (`D.A AURA Installer.exe`)
+   * `DA-AURA-macOS-Installer` (`D.A AURA Installer.dmg` -> `D.A AURA Installer.app`)
 
 ## Install
 
-**Windows:** extract `D.A AURA Installer.exe` from the downloaded Actions artifact
-and run it. The EXE contains the complete VST3 bundle: it can be copied to the desktop or
-sent on its own, without the ZIP or a separate plugins folder. Click Next to
-install to `C:\Program Files\Common Files\VST3\D.A AURA.vst3`. Windows asks for
-administrator permission. The installer is not code-signed, so Windows SmartScreen may
-show a warning. Restart or rescan the DAW after installation.
+**Windows:** extract and run `D.A AURA Installer.exe`. The self-contained borderless installer
+uses the exact `1737 x 664` D.A Production installer UI with octagonal corners and embeds the
+complete `D.A AURA.vst3` bundle inside the `.exe`. Click **Next** to install to
+`C:\Program Files\Common Files\VST3\D.A AURA.vst3`, then restart or rescan your DAW.
 
-The welcome artwork retains the D.A Production branding from the supplied reference.
-The installer installs D.A AURA, and the artwork scales to fit smaller screens while
-keeping the reference aspect ratio.
-
-If an older `D.A Dreamy Reverb.vst3` bundle is installed, remove it after installing
-AURA to avoid duplicate plugin entries. The internal plugin IDs have been retained for
-compatibility, but existing DAW projects should be backed up and tested after the rename.
-
-**macOS:** open `DA-AURA-macOS-Installer.dmg` and run `D.A AURA Installer.app`.
-The app contains both AU and VST3 bundles and can be copied out of the DMG and run on
-its own. It installs them for the current user under `~/Library/Audio/Plug-Ins/`.
-The installer requires macOS 11 or newer (Intel or Apple Silicon). It is ad-hoc signed,
-not notarized, so macOS Gatekeeper may warn or prevent it from opening. If you trust it,
-use the standard macOS Privacy & Security controls to allow it. The plug-ins themselves
-are also ad-hoc signed, so DAW acceptance may vary.
-
-Then restart your DAW (Logic may need a rescan or a reboot to pick up the new AU).
+**macOS:** open `D.A AURA Installer.dmg` and run `D.A AURA Installer.app`. The self-contained
+borderless installer uses the exact `1737 x 664` D.A Production installer UI with octagonal
+corners and embeds both Universal `D.A AURA.vst3` and `D.A AURA.component` bundles inside the
+`.app`. Click **Next** to install both formats to `~/Library/Audio/Plug-Ins/`, then restart or
+rescan your DAW.
 
 ## Build locally
 
@@ -84,17 +55,17 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
-Results are in `build/DreamyReverb_artefacts/Release/`.
+Results are in `build/DAAURA_artefacts/Release/`.
 
 ## Layout
 
 ```
 CMakeLists.txt                 build setup (fetches JUCE 8.0.4)
-Source/DreamyReverbDSP.h       the reverb algorithm (plain C++)
+Source/AuraDSP.h               the reverb algorithm (plain C++)
 Source/PluginProcessor.*       parameters, state, audio callback
 Source/PluginEditor.*          user interface
 Design/aurora-design.png       the approved look of the plugin
-Installer/                     self-contained Windows installer and reference artwork
+Installer/                     self-contained Windows & macOS installers + artwork
 .github/workflows/build.yml    CI for Windows and macOS
 ```
 

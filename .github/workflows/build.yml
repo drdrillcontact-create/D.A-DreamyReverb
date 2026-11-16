@@ -41,8 +41,10 @@ jobs:
           test -d "staging/D.A AURA.vst3"
 
       - name: Test installer payload generation
-        if: runner.os == 'Windows'
-        run: python -m unittest discover -s tests -v
+        shell: bash
+        run: |
+          PY=$(command -v python || command -v python3)
+          "$PY" -m unittest discover -s tests -v
 
       - name: Build self-contained Windows installer
         if: runner.os == 'Windows'
@@ -95,7 +97,8 @@ jobs:
           mkdir -p staging package
           find build -path "*_artefacts*" -type d \( -name "*.vst3" -o -name "*.component" \) -prune -exec cp -R {} staging/ \;
           ls -la staging
-          test -n "$(ls -A staging)"
+          test -d "staging/D.A AURA.vst3"
+          test -d "staging/D.A AURA.component"
           # ad-hoc sign so the bundles load on Apple Silicon
           for b in staging/*; do codesign --force --deep --sign - "$b"; done
 
@@ -141,7 +144,7 @@ jobs:
           run_checked "$executable" --test-install-root "$isolated/installed"
           run_checked diff -r "$app/Contents/Resources/payload/D.A AURA.vst3" "$isolated/installed/VST3/D.A AURA.vst3"
           run_checked diff -r "$app/Contents/Resources/payload/D.A AURA.component" "$isolated/installed/Components/D.A AURA.component"
-          run_checked hdiutil create -volname "D.A AURA Installer" -srcfolder mac-package -ov -format UDZO "package/DA-AURA-macOS-Installer.dmg"
+          run_checked hdiutil create -volname "D.A AURA Installer" -srcfolder mac-package -ov -format UDZO "package/D.A AURA Installer.dmg"
 
       - name: Upload
         uses: actions/upload-artifact@v4

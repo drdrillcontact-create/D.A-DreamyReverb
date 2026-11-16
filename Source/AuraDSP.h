@@ -1,4 +1,4 @@
-// Dreamy Reverb DSP core - plain C++ (no JUCE dependency)
+// D.A AURA DSP core - plain C++ (no JUCE dependency)
 // Signal flow:
 //   in -> pre-delay -> (+ shimmer feedback) -> 4x allpass diffusion
 //      -> 8-line modulated FDN (Hadamard matrix, damping in the loop)
@@ -11,7 +11,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace dreamy
+namespace aura
 {
 
 class DelayLine
@@ -301,4 +301,4 @@ private:
     bool snapSmoothers = true;
 };
 
-} // namespace dreamy
+} // namespace aura

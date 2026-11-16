@@ -112,7 +112,7 @@ void AuroraLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
 }
 
 //==============================================================================
-DreamyReverbAudioProcessorEditor::DreamyReverbAudioProcessorEditor (DreamyReverbAudioProcessor& p)
+DAAuraAudioProcessorEditor::DAAuraAudioProcessorEditor (DAAuraAudioProcessor& p)
     : AudioProcessorEditor (&p), proc (p)
 {
     setLookAndFeel (&lookAndFeel);
@@ -148,15 +148,15 @@ DreamyReverbAudioProcessorEditor::DreamyReverbAudioProcessorEditor (DreamyReverb
     setSize (savedWidth, juce::roundToInt (savedWidth / ratio));
 }
 
-DreamyReverbAudioProcessorEditor::~DreamyReverbAudioProcessorEditor()
+DAAuraAudioProcessorEditor::~DAAuraAudioProcessorEditor()
 {
     freezeAttachment.reset();
     knobs.clear();
     setLookAndFeel (nullptr);
 }
 
-void DreamyReverbAudioProcessorEditor::addKnob (const juce::String& paramId, const juce::String& title,
-                                                float cx, float cy, float radius)
+void DAAuraAudioProcessorEditor::addKnob (const juce::String& paramId, const juce::String& title,
+                                          float cx, float cy, float radius)
 {
     auto* k = knobs.add (new Knob());
     k->cx = cx;
@@ -179,7 +179,7 @@ void DreamyReverbAudioProcessorEditor::addKnob (const juce::String& paramId, con
 }
 
 // The blurred aurora ribbons are rendered once at low resolution and stretched in paint().
-void DreamyReverbAudioProcessorEditor::buildAuroraImage()
+void DAAuraAudioProcessorEditor::buildAuroraImage()
 {
     using namespace aurora_colours;
 
@@ -221,7 +221,7 @@ void DreamyReverbAudioProcessorEditor::buildAuroraImage()
     aurora = img;
 }
 
-void DreamyReverbAudioProcessorEditor::paint (juce::Graphics& g)
+void DAAuraAudioProcessorEditor::paint (juce::Graphics& g)
 {
     using namespace aurora_colours;
 
@@ -245,7 +245,7 @@ void DreamyReverbAudioProcessorEditor::paint (juce::Graphics& g)
                 juce::Justification::centredLeft, false);
 }
 
-void DreamyReverbAudioProcessorEditor::resized()
+void DAAuraAudioProcessorEditor::resized()
 {
     const float scale = (float) getWidth() / (float) baseWidth;
     lookAndFeel.setScale (scale);

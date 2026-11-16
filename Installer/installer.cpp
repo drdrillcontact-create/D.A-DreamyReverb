@@ -6,10 +6,11 @@
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <algorithm>
-#include <cwchar>
 #include <cstdlib>
-#include <initializer_list>
+#include <cstring>
+#include <cwchar>
 #include <filesystem>
+#include <initializer_list>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -17,12 +18,13 @@
 
 namespace fs = std::filesystem;
 namespace {
-constexpr int artWidth = 1466, artHeight = 560;
+constexpr int artWidth = 1737, artHeight = 664, cornerCut = 18;
 HINSTANCE instance;
 Gdiplus::Bitmap* artwork = nullptr;
 IStream* artworkStream = nullptr;
 int pressed = 0;
 bool installing = false;
+bool layeredWindow = false;
 
 std::wstring errorText(const std::exception& e) {
     int n = MultiByteToWideChar(CP_UTF8, 0, e.what(), -1, nullptr, 0);
@@ -39,7 +41,7 @@ void winCheck(bool ok, const char* message) {
 
 fs::path uniquePath(const fs::path& directory) {
     wchar_t name[MAX_PATH];
-    winCheck(GetTempFileNameW(directory.c_str(), L"DAR", 0, name) != 0, "Cannot create temporary path");
+    winCheck(GetTempFileNameW(directory.c_str(), L"DAA", 0, name) != 0, "Cannot create temporary path");
     winCheck(DeleteFileW(name) != 0, "Cannot prepare temporary path");
     return fs::path(name);
 }
@@ -95,7 +97,7 @@ fs::path installPlugin(const fs::path& directory) {
         if (oldMoved) {
             std::error_code restoreError;
             fs::rename(backup, target, restoreError);
-            if (restoreError) throw std::runtime_error("Installation failed and the previous version could not be restored. The previous version is preserved in a DAR temporary folder in the VST3 directory.");
+            if (restoreError) throw std::runtime_error("Installation failed and the previous version could not be restored. The previous version is preserved in a DAA temporary folder in the VST3 directory.");
         }
         throw;
     }
@@ -106,15 +108,16 @@ fs::path installPlugin(const fs::path& directory) {
     return target;
 }
 
-// Hit areas are expressed in coordinates of the reference artwork.
+// Hit areas are expressed in coordinates of the 1737x664 installer artwork.
 int hitTest(HWND hwnd, int x, int y) {
     RECT r; GetClientRect(hwnd, &r);
-    if (r.right == 0 || r.bottom == 0) return 0;
-    x = MulDiv(x, artWidth, r.right); y = MulDiv(y, artHeight, r.bottom);
-    if (x >= 716 && x <= 1049 && y >= 453 && y <= 514) return 1; // Next
-    if (x >= 1081 && x <= 1389 && y >= 453 && y <= 514) return 2; // Cancel
-    if (x >= 1396 && x <= 1440 && y >= 5 && y <= 60) return 3; // Close
-    if (x >= 1344 && x < 1396 && y >= 5 && y <= 60) return 4; // Minimize
+    if (r.right <= 0 || r.bottom <= 0) return 0;
+    x = MulDiv(x, artWidth, r.right);
+    y = MulDiv(y, artHeight, r.bottom);
+    if (x >= 848 && x <= 1243 && y >= 536 && y <= 607) return 1; // Next ->
+    if (x >= 1280 && x <= 1645 && y >= 536 && y <= 607) return 2; // Cancel
+    if (x >= 1656 && x <= 1710 && y >= 14 && y <= 62) return 3;   // Close (X)
+    if (x >= 1592 && x <= 1650 && y >= 14 && y <= 62) return 4;   // Minimize (-)
     return 0;
 }
 
@@ -127,12 +130,12 @@ void activate(HWND hwnd, int action) {
     SetCursor(LoadCursor(nullptr, IDC_WAIT));
     try {
         fs::path target = installPlugin(standardPluginDirectory());
-        std::wstring message = L"Installation complete:\n\n" + target.wstring() + L"\n\nRestart or rescan your DAW to find the plugin.";
-        MessageBoxW(hwnd, message.c_str(), L"D.A AURA", MB_OK | MB_ICONINFORMATION);
+        std::wstring message = L"D.A AURA has been installed:\n\n" + target.wstring() + L"\n\nRestart or rescan your DAW to use D.A AURA.";
+        MessageBoxW(hwnd, message.c_str(), L"D.A AURA Installer", MB_OK | MB_ICONINFORMATION);
         DestroyWindow(hwnd);
     } catch (const std::exception& e) {
         std::wstring message = L"Installation failed. No new plugin was installed.\n\n" + errorText(e);
-        MessageBoxW(hwnd, message.c_str(), L"D.A AURA", MB_OK | MB_ICONERROR);
+        MessageBoxW(hwnd, message.c_str(), L"D.A AURA Installer", MB_OK | MB_ICONERROR);
         installing = false;
     }
 }
@@ -142,37 +145,98 @@ void activate(HWND hwnd, int action) {
 void drawArtwork(Gdiplus::Graphics& graphics, int width, int height) {
     graphics.SetPageUnit(Gdiplus::UnitPixel);
     graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
     graphics.DrawImage(artwork, Gdiplus::Rect(0, 0, width, height),
                        0, 0, artWidth, artHeight, Gdiplus::UnitPixel);
 }
 
+// Render the octagonal RGBA artwork with per-pixel alpha so the 45-degree
+// chamfered corners blend cleanly onto the desktop with no outer window frame.
+bool applyLayeredWindow(HWND hwnd, int posX, int posY, int width, int height) {
+    Gdiplus::Bitmap surface(width, height, PixelFormat32bppPARGB);
+    if (surface.GetLastStatus() != Gdiplus::Ok) return false;
+    {
+        Gdiplus::Graphics graphics(&surface);
+        graphics.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
+        graphics.Clear(Gdiplus::Color(0, 0, 0, 0));
+        graphics.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
+        drawArtwork(graphics, width, height);
+    }
+    HDC screenDc = GetDC(nullptr);
+    HDC memDc = CreateCompatibleDC(screenDc);
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    void* dibBits = nullptr;
+    HBITMAP dib = memDc ? CreateDIBSection(memDc, &bmi, DIB_RGB_COLORS, &dibBits, nullptr, 0) : nullptr;
+    bool ok = false;
+    if (memDc && dib && dibBits) {
+        Gdiplus::Rect lockRect(0, 0, width, height);
+        Gdiplus::BitmapData data = {};
+        if (surface.LockBits(&lockRect, Gdiplus::ImageLockModeRead, PixelFormat32bppPARGB, &data) == Gdiplus::Ok) {
+            const BYTE* srcRow = static_cast<const BYTE*>(data.Scan0);
+            BYTE* dstRow = static_cast<BYTE*>(dibBits);
+            const size_t rowBytes = static_cast<size_t>(width) * 4;
+            for (int row = 0; row < height; ++row) {
+                std::memcpy(dstRow + static_cast<size_t>(row) * rowBytes,
+                            srcRow + static_cast<ptrdiff_t>(row) * data.Stride,
+                            rowBytes);
+            }
+            surface.UnlockBits(&data);
+            HGDIOBJ oldBmp = SelectObject(memDc, dib);
+            POINT ptPos = { posX, posY };
+            SIZE sizeWin = { width, height };
+            POINT ptSrc = { 0, 0 };
+            BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+            ok = UpdateLayeredWindow(hwnd, screenDc, &ptPos, &sizeWin, memDc, &ptSrc, 0, &blend, ULW_ALPHA) != FALSE;
+            SelectObject(memDc, oldBmp);
+        }
+    }
+    if (dib) DeleteObject(dib);
+    if (memDc) DeleteDC(memDc);
+    if (screenDc) ReleaseDC(nullptr, screenDc);
+    return ok;
+}
+
 bool testRendering() {
+    if (static_cast<int>(artwork->GetWidth()) != artWidth ||
+        static_cast<int>(artwork->GetHeight()) != artHeight) return false;
+    Gdiplus::Color corner, center, nextBtn;
+    if (artwork->GetPixel(0, 0, &corner) != Gdiplus::Ok || corner.GetAlpha() != 0) return false;
+    if (artwork->GetPixel(artWidth - 1, 0, &corner) != Gdiplus::Ok || corner.GetAlpha() != 0) return false;
+    if (artwork->GetPixel(0, artHeight - 1, &corner) != Gdiplus::Ok || corner.GetAlpha() != 0) return false;
+    if (artwork->GetPixel(artWidth - 1, artHeight - 1, &corner) != Gdiplus::Ok || corner.GetAlpha() != 0) return false;
+    if (artwork->GetPixel(artWidth / 2, artHeight / 2, &center) != Gdiplus::Ok || center.GetAlpha() != 255) return false;
+    if (artwork->GetPixel(1045, 571, &nextBtn) != Gdiplus::Ok || nextBtn.GetRed() < 180) return false;
+
     const auto diff = [](BYTE a, BYTE b) { return std::abs(int(a) - int(b)); };
     for (int width : {artWidth, artWidth / 2}) {
         const int height = MulDiv(width, artHeight, artWidth);
         Gdiplus::Bitmap baseline(width, height, PixelFormat32bppARGB);
         baseline.SetResolution(96.0f, 96.0f);
         { Gdiplus::Graphics graphics(&baseline); drawArtwork(graphics, width, height); }
-        // The right/bottom areas (including buttons) must really be drawn.
         if (width == artWidth) {
-            for (int y : {30, 200, 350, 480, 530}) {
-                for (int x : {100, 500, 800, 1200, 1400}) {
+            for (int y : {40, 250, 420, 571, 630}) {
+                for (int x : {200, 500, 1045, 1462, 1650}) {
                     Gdiplus::Color expected, actual;
                     if (artwork->GetPixel(x, y, &expected) != Gdiplus::Ok ||
                         baseline.GetPixel(x, y, &actual) != Gdiplus::Ok) return false;
-                    if (diff(expected.GetRed(), actual.GetRed()) > 65 ||
-                        diff(expected.GetGreen(), actual.GetGreen()) > 65 ||
-                        diff(expected.GetBlue(), actual.GetBlue()) > 65) return false;
+                    if (diff(expected.GetRed(), actual.GetRed()) > 25 ||
+                        diff(expected.GetGreen(), actual.GetGreen()) > 25 ||
+                        diff(expected.GetBlue(), actual.GetBlue()) > 25) return false;
                 }
             }
         }
-        // The same client size must render identically at higher target DPIs.
         for (float dpi : {120.0f, 144.0f, 192.0f}) {
             Gdiplus::Bitmap target(width, height, PixelFormat32bppARGB);
             if (target.SetResolution(dpi, dpi) != Gdiplus::Ok) return false;
             { Gdiplus::Graphics graphics(&target); drawArtwork(graphics, width, height); }
-            for (int y : {30, 200, 350, 480, 530}) {
-                for (int x : {100, 500, 800, 1200, 1400}) {
+            for (int y : {40, 250, 420, 571, 630}) {
+                for (int x : {200, 500, 1045, 1462, 1650}) {
                     const int dx = MulDiv(x, width, artWidth);
                     const int dy = MulDiv(y, height, artHeight);
                     Gdiplus::Color expected, actual;
@@ -192,9 +256,11 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_PAINT: {
         PAINTSTRUCT ps; HDC dc = BeginPaint(hwnd, &ps);
-        RECT r; GetClientRect(hwnd, &r);
-        Gdiplus::Graphics graphics(dc);
-        drawArtwork(graphics, r.right, r.bottom);
+        if (!layeredWindow) {
+            RECT r; GetClientRect(hwnd, &r);
+            Gdiplus::Graphics graphics(dc);
+            drawArtwork(graphics, r.right, r.bottom);
+        }
         EndPaint(hwnd, &ps); return 0;
     }
     case WM_PRINTCLIENT: {
@@ -229,6 +295,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
+
 // Exercise the actual borderless window, its client rendering and button hit areas.
 bool testWindow(const wchar_t* className) {
     for (int width : {artWidth, artWidth / 2}) {
@@ -238,10 +305,11 @@ bool testWindow(const wchar_t* className) {
         if (!hwnd) return false;
         RECT client = {}; GetClientRect(hwnd, &client);
         bool ok = client.right == width && client.bottom == height &&
-                  hitTest(hwnd, MulDiv(850, width, artWidth), MulDiv(480, height, artHeight)) == 1 &&
-                  hitTest(hwnd, MulDiv(1200, width, artWidth), MulDiv(480, height, artHeight)) == 2 &&
-                  hitTest(hwnd, MulDiv(1420, width, artWidth), MulDiv(30, height, artHeight)) == 3 &&
-                  hitTest(hwnd, MulDiv(1365, width, artWidth), MulDiv(30, height, artHeight)) == 4;
+                  hitTest(hwnd, MulDiv(1045, width, artWidth), MulDiv(571, height, artHeight)) == 1 &&
+                  hitTest(hwnd, MulDiv(1462, width, artWidth), MulDiv(571, height, artHeight)) == 2 &&
+                  hitTest(hwnd, MulDiv(1682, width, artWidth), MulDiv(38, height, artHeight)) == 3 &&
+                  hitTest(hwnd, MulDiv(1620, width, artWidth), MulDiv(38, height, artHeight)) == 4 &&
+                  hitTest(hwnd, MulDiv(400, width, artWidth), MulDiv(300, height, artHeight)) == 0;
         HDC dc = CreateCompatibleDC(nullptr);
         BITMAPINFO info = {};
         info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -255,7 +323,7 @@ bool testWindow(const wchar_t* className) {
             SendMessageW(hwnd, WM_PRINTCLIENT, reinterpret_cast<WPARAM>(dc), PRF_CLIENT);
             Gdiplus::Bitmap expected(width, height, PixelFormat32bppARGB);
             { Gdiplus::Graphics graphics(&expected); drawArtwork(graphics, width, height); }
-            for (int y : {30, 200, 350, 480, 530}) for (int x : {100, 500, 800, 1200, 1400}) {
+            for (int y : {40, 250, 420, 571, 630}) for (int x : {200, 500, 1045, 1462, 1650}) {
                 const int dx = MulDiv(x, width, artWidth), dy = MulDiv(y, height, artHeight);
                 Gdiplus::Color reference;
                 COLORREF actual = GetPixel(dc, dx, dy);
@@ -274,11 +342,10 @@ bool testWindow(const wchar_t* className) {
     return true;
 }
 
-}
+} // namespace
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR commandLine, int show) {
     instance = hInstance;
-    // Used by CI after copying the executable away from the build and staging folders.
     if (commandLine && wcscmp(commandLine, L"--verify-payload") == 0) {
         for (const auto& file : payloadFiles) {
             HRSRC resource = FindResourceW(instance, MAKEINTRESOURCEW(file.resourceId), RT_RCDATA);
@@ -295,6 +362,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR commandLine, int show)
         return result;
     }
     if (argv) LocalFree(argv);
+
     Gdiplus::GdiplusStartupInput input;
     ULONG_PTR token = 0;
     if (Gdiplus::GdiplusStartup(&token, &input, nullptr) != Gdiplus::Ok) return 1;
@@ -304,7 +372,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR commandLine, int show)
     if (bytes) artworkStream = SHCreateMemStream(bytes, SizeofResource(instance, resource));
     if (artworkStream) artwork = Gdiplus::Bitmap::FromStream(artworkStream);
     if (!artwork || artwork->GetLastStatus() != Gdiplus::Ok) {
-        MessageBoxW(nullptr, L"The installer artwork could not be loaded.", L"D.A AURA", MB_OK | MB_ICONERROR);
+        MessageBoxW(nullptr, L"The installer artwork could not be loaded.", L"D.A AURA Installer", MB_OK | MB_ICONERROR);
         delete artwork; if (artworkStream) artworkStream->Release(); Gdiplus::GdiplusShutdown(token); return 1;
     }
     if (commandLine && wcscmp(commandLine, L"--test-render") == 0) {
@@ -320,22 +388,40 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR commandLine, int show)
         delete artwork; artworkStream->Release(); Gdiplus::GdiplusShutdown(token);
         return ok ? 0 : 3;
     }
-    RECT work; SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
-    int width = std::min(artWidth, std::max(1, static_cast<int>(work.right - work.left - 32)));
+
+    RECT work = {};
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+    const int availW = std::max(320, static_cast<int>(work.right - work.left - 48));
+    const int availH = std::max(200, static_cast<int>(work.bottom - work.top - 48));
+    HDC screenDc = GetDC(nullptr);
+    const int dpi = screenDc ? GetDeviceCaps(screenDc, LOGPIXELSX) : 96;
+    if (screenDc) ReleaseDC(nullptr, screenDc);
+
+    int desiredW = (dpi >= 168) ? MulDiv(artWidth, dpi, 96) : artWidth;
+    int width = std::min(desiredW, availW);
     int height = MulDiv(width, artHeight, artWidth);
-    if (height > work.bottom - work.top - 32) {
-        height = std::max(1, static_cast<int>(work.bottom - work.top - 32)); width = MulDiv(height, artWidth, artHeight);
+    if (height > availH) {
+        height = availH;
+        width = MulDiv(height, artWidth, artHeight);
     }
-    HWND hwnd = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, L"D.A AURA Installer", WS_POPUP | WS_MINIMIZEBOX,
-        work.left + (work.right - work.left - width) / 2, work.top + (work.bottom - work.top - height) / 2,
-        width, height, nullptr, nullptr, instance, nullptr);
+    const int posX = work.left + (work.right - work.left - width) / 2;
+    const int posY = work.top + (work.bottom - work.top - height) / 2;
+
+    HWND hwnd = CreateWindowExW(WS_EX_APPWINDOW | WS_EX_LAYERED, wc.lpszClassName, L"D.A AURA Installer",
+        WS_POPUP | WS_MINIMIZEBOX, posX, posY, width, height, nullptr, nullptr, instance, nullptr);
     if (!hwnd) { delete artwork; artworkStream->Release(); Gdiplus::GdiplusShutdown(token); return 1; }
-    // Match the clipped corners of the supplied design, without a native title bar.
-    int cut = std::max(1, MulDiv(17, width, artWidth));
-    POINT points[] = {{cut,0},{width-cut,0},{width,cut},{width,height-cut},{width-cut,height},{cut,height},{0,height-cut},{0,cut}};
-    HRGN region = CreatePolygonRgn(points, 8, WINDING);
-    if (region && !SetWindowRgn(hwnd, region, TRUE)) DeleteObject(region);
-    ShowWindow(hwnd, show); UpdateWindow(hwnd);
+
+    layeredWindow = applyLayeredWindow(hwnd, posX, posY, width, height);
+    if (!layeredWindow) {
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
+        int cut = std::max(1, MulDiv(cornerCut, width, artWidth));
+        POINT points[] = {{cut,0},{width-cut,0},{width,cut},{width,height-cut},{width-cut,height},{cut,height},{0,height-cut},{0,cut}};
+        HRGN region = CreatePolygonRgn(points, 8, WINDING);
+        if (region && !SetWindowRgn(hwnd, region, TRUE)) DeleteObject(region);
+    }
+
+    ShowWindow(hwnd, show);
+    if (!layeredWindow) UpdateWindow(hwnd);
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     delete artwork; artworkStream->Release(); Gdiplus::GdiplusShutdown(token);

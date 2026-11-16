@@ -1,0 +1,8 @@
+build/
+build-installer/
+staging/
+package/
+mac-package/
+__pycache__/
+*.pyc
+.DS_Store

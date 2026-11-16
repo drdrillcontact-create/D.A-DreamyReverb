@@ -7,7 +7,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "" FORCE)
 # Windows: link the MSVC runtime statically so users need no redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(DreamyReverb VERSION 1.0.0)
+project(DAAURA VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,19 +22,20 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(JUCE)
 
 if(APPLE)
-    set(DREAMY_FORMATS VST3 AU)
+    set(AURA_FORMATS VST3 AU)
 else()
-    set(DREAMY_FORMATS VST3)
+    set(AURA_FORMATS VST3)
 endif()
 
-juce_add_plugin(DreamyReverb
+juce_add_plugin(DAAURA
     COMPANY_NAME                "D.A"
-    # Keep the existing bundle/plugin IDs for compatibility with older projects.
-    BUNDLE_ID                   "com.da.dreamyreverb"
-    PLUGIN_MANUFACTURER_CODE    Drma
-    PLUGIN_CODE                 Drvb
-    FORMATS                     ${DREAMY_FORMATS}
+    BUNDLE_ID                   "com.da.aura"
+    PLUGIN_MANUFACTURER_CODE    DApr
+    PLUGIN_CODE                 Aura
+    FORMATS                     ${AURA_FORMATS}
+    PLUGIN_NAME                 "D.A AURA"
     PRODUCT_NAME                "D.A AURA"
+    DESCRIPTION                 "D.A AURA"
     IS_SYNTH                    FALSE
     NEEDS_MIDI_INPUT            FALSE
     NEEDS_MIDI_OUTPUT           FALSE
@@ -44,19 +45,19 @@ juce_add_plugin(DreamyReverb
     VST3_CATEGORIES             Fx Reverb
     AU_MAIN_TYPE                kAudioUnitType_Effect)
 
-juce_generate_juce_header(DreamyReverb)
+juce_generate_juce_header(DAAURA)
 
-target_sources(DreamyReverb PRIVATE
+target_sources(DAAURA PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp)
 
-target_compile_definitions(DreamyReverb PUBLIC
+target_compile_definitions(DAAURA PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0)
 
-target_link_libraries(DreamyReverb
+target_link_libraries(DAAURA
     PRIVATE
         juce::juce_audio_utils
     PUBLIC
