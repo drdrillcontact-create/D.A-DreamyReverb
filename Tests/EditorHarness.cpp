@@ -80,6 +80,26 @@ int main()
            "the host can pick a program and it is applied");
     check (proc.apvts.getParameter ("freeze")->getValue() > 0.5f, "a frozen preset freezes the knobs");
 
+    // ---- the state, as a host saves and restores it (pluginval's "Plugin state restoration") --
+    // pluginval sets a parameter with setValue(), which does not notify, then restores the state
+    {
+        juce::MemoryBlock state;
+        proc.getStateInformation (state);
+
+        for (auto* parameter : proc.getParameters())
+        {
+            if (parameter->isMetaParameter())
+                continue;
+
+            const auto before = parameter->getValue();
+            parameter->setValue (juce::Random::getSystemRandom().nextFloat());
+            proc.setStateInformation (state.getData(), (int) state.getSize());
+
+            check (std::abs (parameter->getValue() - before) < 0.1f,
+                   "the state brings " + parameter->getName (64) + " back");
+        }
+    }
+
     // ---- the window ------------------------------------------------------------------------
     std::unique_ptr<juce::AudioProcessorEditor> editor (proc.createEditor());
     check (editor != nullptr, "the window is made");

@@ -36,6 +36,13 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    /** Writes the saved state's values into every parameter.
+        (AudioProcessorValueTreeState::replaceState() only moves a parameter whose value
+        differs from the one its tree already holds. A host - pluginval among them - may have
+        moved a parameter through setValue(), which leaves the tree behind, so the two can
+        disagree; this puts the tree's values back into the parameters regardless.) */
+    void writeStateIntoParameters();
+
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     juce::AudioProcessorValueTreeState apvts;

@@ -315,7 +315,38 @@ void DAAuraAudioProcessor::setStateInformation (const void* data, int sizeInByte
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts.state.getType()))
+        {
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            writeStateIntoParameters();
+        }
+}
+
+void DAAuraAudioProcessor::writeStateIntoParameters()
+{
+    const auto& tree = apvts.state;
+
+    for (int i = 0; i < tree.getNumChildren(); ++i)
+    {
+        const auto child = tree.getChild (i);
+
+        if (! child.hasType ("PARAM"))
+            continue;
+
+        const auto id = child.getProperty ("id").toString();
+
+        if (id.isEmpty())
+            continue;
+
+        auto* parameter = apvts.getParameter (id);
+
+        if (parameter == nullptr)
+            continue;
+
+        const auto saved = (float) child.getProperty ("value", parameter->getValue());
+
+        if (std::abs (saved - parameter->getValue()) > 1.0e-6f)
+            parameter->setValueNotifyingHost (saved);
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
