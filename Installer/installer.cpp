@@ -2,6 +2,7 @@
 #include <windowsx.h>
 #include <objidl.h>
 #include <gdiplus.h>
+#include <shellapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <algorithm>
