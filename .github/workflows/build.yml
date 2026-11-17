@@ -369,18 +369,43 @@ jobs:
         with:
           path: incoming
 
+      # Whatever the download produced - folders, plain files, or zips holding zips - this puts
+      # the six files that matter into files/, by their names, and says what it saw.
       - name: Put the files in one folder
         run: |
           set -e
           mkdir -p files
-          # (the uploads were made with archive: false, so each artifact is the file itself;
-          #  a name that ends in .zip is the file, anything else is a folder to look inside)
-          cp -v incoming/D.A-AURA-* files/ 2>/dev/null || true
-          find incoming -type f -exec cp -v {} files/ \;
+          echo "--- everything that arrived:"
+          find incoming -mindepth 1 -maxdepth 4 | sort | head -60
+
+          wanted="D.A-AURA-Windows-Installer.zip D.A-AURA-Windows-x64-VST3.zip D.A-AURA-macOS-Installer.zip D.A-AURA-macOS-Universal-AU-VST3.zip D.A-AURA-Windows-installer-pictures.zip D.A-AURA-macOS-installer-pictures.zip"
+
+          for name in $wanted; do
+            found="$(find incoming -name "$name" -type f | head -n 1)"
+
+            if [ -z "$found" ]; then
+              # (a zip that arrived still packed: take the file out of it)
+              for z in $(find incoming -name '*.zip' -type f); do
+                if unzip -l "$z" 2>/dev/null | grep -q -- "$name"; then
+                  rm -rf unpack && mkdir unpack
+                  unzip -q -o "$z" -d unpack
+                  found="$(find unpack -name "$name" -type f | head -n 1)"
+                  break
+                fi
+              done
+            fi
+
+            if [ -n "$found" ]; then
+              cp -v "$found" "files/$name"
+            else
+              echo "::warning title=Not found::$name"
+            fi
+          done
+
           ls -la files
-          for f in D.A-AURA-Windows-Installer.zip D.A-AURA-Windows-x64-VST3.zip \
-                   D.A-AURA-macOS-Installer.zip D.A-AURA-macOS-Universal-AU-VST3.zip; do
-            [ -f "files/$f" ] || { echo "::error title=A file is missing::$f did not arrive from the build"; exit 1; }
+
+          for name in D.A-AURA-Windows-Installer.zip D.A-AURA-Windows-x64-VST3.zip D.A-AURA-macOS-Installer.zip D.A-AURA-macOS-Universal-AU-VST3.zip; do
+            [ -f "files/$name" ] || { echo "::error title=A file is missing::$name did not arrive from the build"; exit 1; }
           done
 
       # The plug-in and its installer, for both systems, and the two pictures of the installer's
