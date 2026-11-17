@@ -1,6 +1,8 @@
 // Drives the processor and its window with a signal, headless: the presets' browsing, the
 // window's labels, and the aurora's motion. Built and run by Tests/run-editor-harness.sh.
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <algorithm>
+#include <vector>
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
@@ -128,9 +130,21 @@ int main()
         return false;
     };
 
-    const auto showsPresetName = [&textOfSize] (juce::Component&, const char* label)
+    // the preset's name is a button now (the one that opens the list), so its text is read
+    // from the buttons rather than from the labels
+    const auto shownPresetName = [&editor] () -> juce::String
     {
-        return textOfSize (label, 19.0f);
+        for (auto* c : editor->getChildren())
+            if (auto* b = dynamic_cast<juce::TextButton*> (c))
+                if (b->getComponentID() == "presetname")
+                    return b->getButtonText();
+
+        return {};
+    };
+
+    const auto showsPresetName = [&shownPresetName] (juce::Component&, const char* label)
+    {
+        return shownPresetName() == label;
     };
 
     proc.applyPreset (aura::findPreset ("Shimmer Veil"));
@@ -169,7 +183,7 @@ int main()
         // the arrows follow a preset the host set as well
         proc.setCurrentProgram (7);
         runMessages (120);
-        check (textOf ("Concert Hall"), "the window follows the host's program changes");
+        check (shownPresetName() == "Concert Hall", "the window follows the host's program changes");
     }
 
     // ---- the aurora moves with the signal ---------------------------------------------------
@@ -213,10 +227,143 @@ int main()
     runMessages (400);
     check (levelOf() < levelOf() + 1.0f, "the level is reported");
 
+    // ---- the aurora is the design's own light, and it is alive ------------------------------
+    // (it used to be drawn from a small pre-blurred picture, stretched, which the screen on
+    //  one platform showed as almost nothing: the window came out flat and dark)
+    {
+        auto shot = [] (juce::Component& c)
+        {
+            juce::Image image (juce::Image::ARGB, c.getWidth(), c.getHeight(), true);
+            { juce::Graphics g (image); c.paintEntireComponent (g, true); }
+            return image;
+        };
+
+        auto brightness = [] (const juce::Image& image, int fromRow, int toRow)
+        {
+            juce::Image::BitmapData data (image, juce::Image::BitmapData::readOnly);
+            double sum = 0; int n = 0;
+
+            for (int y = fromRow; y < toRow; y += 2)
+                for (int x = 0; x < image.getWidth(); x += 2)
+                {
+                    const auto p = data.getPixelColour (x, y);
+                    sum += (p.getRed() + p.getGreen() + p.getBlue()) / 3.0; ++n;
+                }
+
+            return n > 0 ? sum / n : 0.0;
+        };
+
+        // (everything but the signal)
+        proc.reset();
+        juce::AudioBuffer<float> silence (2, 512);
+        juce::MidiBuffer noMidi;
+        for (int i = 0; i < 40; ++i) proc.processBlock (silence, noMidi);
+        proc.apvts.getParameter ("freeze")->setValueNotifyingHost (0.0f);
+        runMessages (600);
+
+        const auto quiet = shot (*editor);
+
+        // the light is in the middle of the window, and the top of it stays dark for the type
+        const double middle = brightness (quiet, (int) (quiet.getHeight() * 0.20), (int) (quiet.getHeight() * 0.65));
+        const double top    = brightness (quiet, 0, (int) (quiet.getHeight() * 0.06));
+
+        check (middle > 34.0, "at rest the aurora is the design's light (the middle reads " + juce::String (middle, 1) + ")");
+        check (middle > top + 8.0, "and it is the middle of the window that holds the light, not the top");
+
+        // it breathes even at rest, so that the window is never a still picture
+        runMessages (900);
+        const auto later = shot (*editor);
+        double moved = 0; int n = 0;
+        {
+            juce::Image::BitmapData a (quiet, juce::Image::BitmapData::readOnly);
+            juce::Image::BitmapData b (later, juce::Image::BitmapData::readOnly);
+
+            for (int y = 0; y < quiet.getHeight(); y += 2)
+                for (int x = 0; x < quiet.getWidth(); x += 2)
+                {
+                    moved += std::abs ((int) a.getPixelColour (x, y).getGreen() - (int) b.getPixelColour (x, y).getGreen());
+                    ++n;
+                }
+        }
+        check (moved / juce::jmax (1, n) > 0.02,
+               "and at rest it breathes slowly (it changed by " + juce::String (moved / juce::jmax (1, n), 2) + ")");
+    }
+
     // ---- the window at another size ---------------------------------------------------------
     editor->setSize (1100, 657);
     runMessages (120);
     check (editor->getWidth() == 1100, "the window resizes and redraws");
+
+    // ---- the window remembers the size it was left at --------------------------------------
+    // (it used to open at the smallest size every time: the saved width was read after the
+    //  limits were set, and setting them put the window at the smallest size - which resized()
+    //  then wrote back over the saved one)
+    {
+        juce::MemoryBlock state;
+        proc.getStateInformation (state);
+
+        DAAuraAudioProcessor again;
+        again.prepareToPlay (48000.0, 512);
+        again.setStateInformation (state.getData(), (int) state.getSize());
+
+        std::unique_ptr<juce::AudioProcessorEditor> reopened (again.createEditor());
+        runMessages (120);
+        check (reopened->getWidth() == 1100,
+               "the window opens again at the size it was left at (it is " + juce::String (reopened->getWidth()) + ")");
+
+        // and a window that has never been resized opens at its own size, not the smallest
+        DAAuraAudioProcessor fresh;
+        fresh.prepareToPlay (48000.0, 512);
+        std::unique_ptr<juce::AudioProcessorEditor> first (fresh.createEditor());
+        runMessages (60);
+        check (first->getWidth() == 720, "a window that has never been resized opens at 720 wide");
+    }
+
+    // ---- every preset is in the browser's list ---------------------------------------------
+    {
+        const auto menu = DAAuraAudioProcessorEditor::buildPresetMenu (5);
+
+        check (menu.getNumItems() == aura::numSpaces, "the browser groups the presets by space");
+
+        juce::PopupMenu::MenuItemIterator it (menu, true);
+        std::vector<int> ids;
+        int names = 0;
+
+        while (it.next())
+        {
+            auto& item = it.getItem();
+
+            if (item.itemID > 0)
+            {
+                ids.push_back (item.itemID);
+                ++names;
+            }
+        }
+
+        check (names == aura::numPresets,
+               "the browser lists all fifty presets (it lists " + juce::String (names) + ")");
+
+        bool everyOneOnce = (int) ids.size() == aura::numPresets;
+
+        for (int i = 0; i < aura::numPresets && everyOneOnce; ++i)
+            everyOneOnce = std::find (ids.begin(), ids.end(), i + 1) != ids.end();
+
+        check (everyOneOnce, "each preset is in the list once, and none is missing");
+    }
+
+    // ---- the preset's name is what opens the list ------------------------------------------
+    {
+        juce::TextButton* name = nullptr;
+
+        for (auto* c : editor->getChildren())
+            if (auto* b = dynamic_cast<juce::TextButton*> (c))
+                if (b->getComponentID() == "presetname")
+                    name = b;
+
+        check (name != nullptr, "the preset's name is a button");
+        check (name != nullptr && name->getButtonText() == shownPresetName(),
+               "and it says the preset that is on");
+    }
 
     editor.reset();
     proc.releaseResources();

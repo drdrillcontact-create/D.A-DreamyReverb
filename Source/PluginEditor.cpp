@@ -26,6 +26,20 @@ AuroraLookAndFeel::AuroraLookAndFeel()
 {
     setColour (juce::Label::textColourId, aurora_colours::text);
     setColour (juce::ResizableWindow::backgroundColourId, aurora_colours::bgTop);
+
+    // (the preset's name is a button now, so it asks for a button's colours as well as the
+    //  colours below; the others are what the arrows and FREEZE are drawn with)
+    setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    setColour (juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+    setColour (juce::TextButton::textColourOffId, aurora_colours::text);
+    setColour (juce::TextButton::textColourOnId, aurora_colours::bgTop);
+
+    // the browser's menu, in the plug-in's own colours
+    setColour (juce::PopupMenu::backgroundColourId, aurora_colours::bgTop.withAlpha (0.97f));
+    setColour (juce::PopupMenu::textColourId, aurora_colours::text);
+    setColour (juce::PopupMenu::headerTextColourId, aurora_colours::text.withAlpha (0.6f));
+    setColour (juce::PopupMenu::highlightedBackgroundColourId, aurora_colours::green.withAlpha (0.22f));
+    setColour (juce::PopupMenu::highlightedTextColourId, aurora_colours::bright);
 }
 
 void AuroraLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
@@ -83,6 +97,10 @@ void AuroraLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b
 {
     using namespace aurora_colours;
 
+    // (the preset's name has no frame of its own: it is text over the aurora)
+    if (button.getComponentID() == "presetname")
+        return;
+
     const auto area = button.getLocalBounds().toFloat().reduced (1.0f * scale);
     const float corner = area.getHeight() * 0.5f;
     const bool on = button.getToggleState();
@@ -130,6 +148,17 @@ void AuroraLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
         return;
     }
 
+    // (the preset's name: the big one, drawn like the label it stands in for)
+    if (id == "presetname")
+    {
+        const auto colour = (highlighted || down) ? bright : text;
+        g.setColour (colour);
+        g.setFont (makeFont (17.0f * scale, false, 0.06f));
+        g.drawFittedText (button.getButtonText(), button.getLocalBounds(),
+                          juce::Justification::centredLeft, 1, 0.6f);
+        return;
+    }
+
     g.setColour (button.getToggleState() ? bgTop : green);
     g.setFont (makeFont (11.0f * scale, button.getToggleState(), 0.28f));
     g.drawText (button.getButtonText(), button.getLocalBounds(), juce::Justification::centred, false);
@@ -139,12 +168,17 @@ void AuroraLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& but
 //==============================================================================
 // The aurora behind the knobs.
 //
-// At rest the picture is the design's own: a dark field with soft ribbons of green and blue
-// light lying across the lower half, a few stars above them. When the plug-in carries a signal
-// the whole field answers it (see Reverb::Life): the level lifts the ribbons and makes them
-// travel, the sixteen bands of the spectrum set the stars' brightness and drift from the low
-// ones on the left to the high ones on the right, and every onset that the signal's envelope
-// reports sends a ring of light outward from the middle.
+// The design's light: one wide green ridge running up from a little left of the middle to the
+// top right corner, a blue-violet band following above it, a low teal wash across the bottom
+// half, and a purple one on the right. At rest they are exactly where the design puts them.
+//
+// When the plug-in carries a signal the whole field answers it (see Reverb::Life): the level
+// opens the bands out and lifts them, the ribbons travel faster, the sixteen bands of the
+// spectrum make the stars in the dark top twinkle from the low ones on the left to the high
+// ones on the right, and each onset sends a ring of light outward from the middle.
+//
+// Every band is a plain filled path with a vertical gradient - nothing pre-rendered - so that
+// it looks the same on Windows and on macOS, at any window size.
 AuroraField::AuroraField()
 {
     setInterceptsMouseClicks (false, false);
@@ -153,69 +187,44 @@ AuroraField::AuroraField()
 
     using namespace aurora_colours;
 
-    // The ribbons are the design's own light: wide, soft, and living in the lower part of the
-    // window (the top stays dark, which is what makes the knobs read).
-    struct Shape { float height, tilt, amplitude, thickness, alpha; };
-    const Shape shapes[] =
-    {
-        //  height  tilt   amp  thick  alpha
-        {   0.30f, -0.16f, 14.0f, 132.0f, 0.30f },   // the wide green band across the middle
-        {   0.42f,  0.10f, 18.0f, 104.0f, 0.24f },   // and the blue one that follows it
-        {   0.58f, -0.07f, 12.0f,  76.0f, 0.21f },
-        {   0.74f,  0.05f, 16.0f, 112.0f, 0.22f },
-        {   0.20f, -0.03f,  9.0f,  54.0f, 0.14f },   // a faint one higher up
-        {   0.90f,  0.02f, 20.0f,  92.0f, 0.16f },
-        {   0.50f,  0.03f, 10.0f,  44.0f, 0.12f },
-    };
+    //                                              from              to                bow   width strength reach fade  colour
+    bands =
+    {{
+        // the green ridge: from the left of the middle up to the top right, the design's own light
+        // (it is the brightest thing in the design, and it climbs steeply towards the right)
+        { { -0.06f, 0.55f }, { 1.06f, 0.09f }, 0.05f, 0.180f, 0.52f, 1.00f, 0.05f, green,  0.024f, 0.0f, 0.9f, 0.10f },
+        { { -0.06f, 0.47f }, { 1.06f, 0.15f }, 0.04f, 0.165f, 0.29f, 1.00f, 0.08f, green,  0.030f, 2.6f, 1.0f, 0.08f },
+        // the blue-violet above and to the right of it
+        { { 0.10f, 0.30f }, { 1.06f, 0.01f }, 0.02f, 0.200f, 0.26f, 1.00f, 0.12f, blue,   0.026f, 1.7f, 0.8f, 0.08f },
+        // the low teal wash across the lower half
+        { { -0.06f, 0.76f }, { 1.06f, 0.58f }, 0.03f, 0.160f, 0.22f, 1.00f, 0.06f, green,  0.030f, 3.1f, 1.1f, 0.06f },
+        // a purple one towards the right, low down
+        { { 0.30f, 0.68f }, { 1.06f, 0.44f }, 0.03f, 0.160f, 0.17f, 1.00f, 0.12f, purple, 0.026f, 4.4f, 1.0f, 0.05f },
+        // the even glow the design has right across the middle of the window
+        { { -0.06f, 0.68f }, { 1.06f, 0.28f }, 0.06f, 0.320f, 0.15f, 1.00f, 0.08f, green,  0.034f, 5.3f, 0.7f, 0.06f },
+        // and a faint one across the upper middle, which is where the design's light is widest
+        { { -0.06f, 0.55f }, { 1.06f, 0.17f }, 0.05f, 0.250f, 0.12f, 1.00f, 0.10f, blue,   0.030f, 6.1f, 0.6f, 0.05f },
+    }};
 
-    const juce::Colour palette[] = { green, blue, green, blue, purple, green, blue };
     juce::Random random (0x0a17a);
-
-    for (size_t i = 0; i < ribbons.size(); ++i)
-    {
-        auto& r = ribbons[i];
-        const auto& shape = shapes[i % (sizeof (shapes) / sizeof (shapes[0]))];
-
-        r.phase     = random.nextFloat() * juce::MathConstants<float>::twoPi;
-        r.speed     = 0.05f + 0.04f * random.nextFloat();
-        r.height    = shape.height;
-        r.thickness = shape.thickness;
-        r.amp       = shape.amplitude;
-        r.tilt      = shape.tilt;
-        r.colour    = palette[i % (sizeof (palette) / sizeof (palette[0]))];
-        r.alpha     = shape.alpha;
-
-    }
 
     for (size_t i = 0; i < stars.size(); ++i)
     {
         auto& s = stars[i];
         s.x       = random.nextFloat();
-        s.y       = std::pow (random.nextFloat(), 2.4f) * 0.62f;   // (only in the dark top)
-        s.size    = 0.5f + 1.5f * random.nextFloat();
-        s.alpha   = 0.06f + 0.30f * random.nextFloat();
+        s.y       = std::pow (random.nextFloat(), 2.2f) * 0.55f;   // (only in the dark top)
+        s.size    = 0.6f + 1.5f * random.nextFloat();
+        s.alpha   = 0.05f + 0.26f * random.nextFloat();
         s.twinkle = random.nextFloat() * juce::MathConstants<float>::twoPi;
-        s.drift   = 0.4f + 0.9f * random.nextFloat();
     }
-
-    for (auto& r : rings)
-    {
-        r.radius = 1.0f;
-        r.alpha  = 0.0f;
-        r.width  = 1.0f;
-    }
-
-    buildAuroraImage (restImage,  0.0f);
-    buildAuroraImage (awakeImage, 1.0f);
 }
 
 void AuroraField::moveTo (const aura::Reverb::Life& l, double secondsSinceLastMove)
 {
     const float dt = juce::jlimit (0.001f, 0.2f, (float) secondsSinceLastMove);
-    const float motion = getProperties().getWithDefault ("motion", 1.0f);
 
-    // the signal's numbers, followed a little more so that nothing jumps between refreshes
-    level      += 0.35f * (l.level.load() - level);
+    // the signal's numbers, followed so that nothing jumps between refreshes
+    level      += 0.30f * (l.level.load() - level);
     delayLevel += 0.20f * (l.delayLevel.load() - delayLevel);
 
     const float onset = l.transient.load();
@@ -224,98 +233,112 @@ void AuroraField::moveTo (const aura::Reverb::Life& l, double secondsSinceLastMo
     for (int b = 0; b < aura::Reverb::Life::numBands; ++b)
         band[b] += 0.30f * (l.band[b].load() - band[b]);
 
-    // an onset starts a ring of light
-    if (onset > 0.55f)
-    {
-        auto& ring = rings[(size_t) nextRing];
-        nextRing = (nextRing + 1) % (int) rings.size();
+    // the bands travel - slowly at rest, so that the window is never a still picture, and
+    // quickly with a signal
+    const float step = dt * (0.85f + 2.2f * level);
+    time += step;
 
-        if (ring.alpha < 0.05f)
-        {
-            ring.radius = 0.06f;
-            ring.alpha  = 0.35f + 0.45f * onset;
-            ring.width  = 1.0f + 1.6f * onset;
-        }
-    }
-
-    for (auto& ring : rings)
-    {
-        ring.radius += dt * (0.22f + 0.35f * level) * motion;
-        ring.alpha  *= std::pow (0.35f, dt);
-    }
-
-    // the ribbons travel with the signal
-    const float timeStep = dt * (0.25f + 2.2f * level) * motion;
-    time += timeStep;
-
-    for (auto& r : ribbons)
-        r.phase += timeStep * r.speed * 6.0f;
+    for (auto& b : bands)
+        b.phase += step * b.speed * 2.0f;
 
     repaint();
 }
 
-// The aurora, drawn small and blurred once: the design's own soft light for the rest state,
-// and a fuller, wider one for a signal. Drawing it at a sixth of the size and stretching it
-// back up is what gives it the design's haze (and costs nothing at every refresh).
-void AuroraField::buildAuroraImage (juce::Image& target, float strength) const
+float AuroraField::centreAt (const Band& b, float t, float awakeness) const
 {
-    // the signal's picture is the same light, one phase further on: it is what travels
-    const float phaseShift = 2.4f * strength;
+    const float across = juce::jlimit (0.0f, 1.0f, t);
 
-    constexpr float s = 1.0f / 3.0f;
-    const int w = juce::roundToInt ((float) DAAuraAudioProcessorEditor::baseWidth * s);
-    const int h = juce::roundToInt ((float) DAAuraAudioProcessorEditor::baseHeight * s);
+    float y = b.from.y + (b.to.y - b.from.y) * across;
 
-    target = juce::Image (juce::Image::ARGB, w, h, true);
-    juce::Graphics g (target);
+    // the line bows a little (a parabola through the middle of its span, 0 at both ends)
+    y += b.bow * std::sin (across * juce::MathConstants<float>::pi);
 
-    for (const auto& r : ribbons)
-    {
-        // the design's ribbons lie low and lean a little; a signal lifts them and widens them
-        const float height = juce::jlimit (0.05f, 0.98f,
-                                           r.height + 0.16f * strength * (0.5f - r.height));
-        const float alpha  = r.alpha * (0.92f + 0.10f * strength);
-        const float amp    = r.amp   * (0.55f + 1.9f * strength);
+    // it undulates - a little at rest, more with a signal
+    if (b.wave > 0.0001f)
+        y += b.wave * (0.30f + 1.30f * awakeness) * std::sin (b.phase + across * 5.4f);
 
-        juce::Path path;
+    // a signal lifts the light towards the middle of the window
+    y += b.lift * awakeness * (0.5f - y);
 
-        for (int x = -12; x <= w + 12; x += 6)
-        {
-            const float t = (float) x / (float) w;
-            const float y = height * (float) h
-                          + (t - 0.5f) * r.tilt * (float) h
-                          + std::sin (r.phase + phaseShift + t * 4.1f) * amp * s
-                          + std::sin (r.phase * 1.9f + phaseShift * 0.7f + t * 9.0f) * amp * 0.25f * s;
-
-            if (x <= -12)
-                path.startNewSubPath ((float) x, y);
-            else
-                path.lineTo ((float) x, y);
-        }
-
-        // its light fades in from the left and out before the right edge: a gradient across
-        // the whole picture, which is only ever used once (the picture is finished here)
-        juce::ColourGradient gradient (r.colour.withAlpha (0.0f), 0.0f, 0.0f,
-                                       r.colour.withAlpha (0.0f), (float) w, 0.0f, false);
-        gradient.addColour (0.02, r.colour.withAlpha (0.0f));
-        gradient.addColour (0.20, r.colour.withAlpha (alpha * 0.65f));
-        gradient.addColour (0.40, r.colour.withAlpha (alpha));
-        gradient.addColour (0.68, r.colour.withAlpha (alpha * 0.55f));
-        gradient.addColour (0.90, r.colour.withAlpha (alpha * 0.10f));
-        gradient.addColour (1.00, r.colour.withAlpha (0.0f));
-
-        g.setGradientFill (gradient);
-        g.strokePath (path, juce::PathStrokeType ((r.thickness * (1.0f + 0.30f * strength)) * s * 1.35f,
-                                                  juce::PathStrokeType::curved,
-                                                  juce::PathStrokeType::rounded));
-    }
-
-    juce::ImageConvolutionKernel blur (17);
-    blur.createGaussianBlur (2.6f);
-    blur.applyToImage (target, target, target.getBounds());
+    return y;
 }
 
-juce::ColourGradient AuroraField::backdrop()
+void AuroraField::drawBand (juce::Graphics& g, const Band& b, float awakeness, float w, float h) const
+{
+    // A signal opens the band out and makes it brighter.
+    const float width    = b.width    * (1.0f + 0.30f * awakeness) * h;
+    const float strength = b.strength * (1.0f + 0.10f * awakeness);
+
+    if (width < 0.5f || strength <= 0.001f)
+        return;
+
+    // The band's shape: its centre line, taken out to half its thickness on each side. It runs
+    // from before the left edge to beyond the right one, so that the window's own rounded panel
+    // is what ends it - the design's light leaves the window, it does not stop inside it.
+    const int steps = juce::jlimit (24, 128, (int) (w / 6.0f));
+    const float from = -0.06f, to = 1.06f;
+
+    const auto halfAt = [&b, awakeness, width] (float t)
+    {
+        // (a signal makes it breathe; at rest this is the same all along)
+        return 0.5f * width * (1.0f + (0.10f + 0.22f * awakeness) * std::sin (t * 4.2f + b.phase));
+    };
+
+    juce::Path shape;
+
+    for (int i = 0; i <= steps; ++i)
+    {
+        const float t = from + (to - from) * (float) i / (float) steps;
+        const float x = t * w;
+        const float y = centreAt (b, t, awakeness) * h;
+
+        if (i == 0) shape.startNewSubPath (x, y - halfAt (t));
+        else        shape.lineTo (x, y - halfAt (t));
+    }
+
+    for (int i = steps; i >= 0; --i)
+    {
+        const float t = from + (to - from) * (float) i / (float) steps;
+        shape.lineTo (t * w, centreAt (b, t, awakeness) * h + halfAt (t));
+    }
+
+    shape.closeSubPath();
+
+    // The light across the band: brightest along its centre line, thinning to nothing at either
+    // edge. The gradient runs *across* the band (perpendicular to the way it travels), so the
+    // light is even along its whole length however steeply it climbs - and, being one gradient
+    // over one shape, there is no step or seam anywhere in it. (A gradient down the screen
+    // instead would be even only on a band that runs level; a gradient along the band would end
+    // in a hard edge at each of its ends.)
+    const auto start  = juce::Point<float> (b.from.x * w, b.from.y * h);
+    const auto finish = juce::Point<float> (b.to.x * w, b.to.y * h);
+    const auto along  = finish - start;
+    const float length = juce::jmax (1.0f, along.getDistanceFromOrigin());
+    const auto across = juce::Point<float> (-along.y / length, along.x / length);
+
+    const auto middle = juce::Point<float> ((start.x + finish.x) * 0.5f, (start.y + finish.y) * 0.5f);
+    const float half = width * 0.62f;
+
+    juce::ColourGradient glow (b.colour.withAlpha (0.0f),
+                               middle.x - across.x * half, middle.y - across.y * half,
+                               b.colour.withAlpha (0.0f),
+                               middle.x + across.x * half, middle.y + across.y * half,
+                               false);
+
+    const float s = juce::jlimit (0.0f, 1.0f, strength);
+    glow.addColour (0.00, b.colour.withAlpha (0.0f));
+    glow.addColour (0.18, b.colour.withAlpha (s * 0.16f));
+    glow.addColour (0.36, b.colour.withAlpha (s * 0.46f));
+    glow.addColour (0.50, b.colour.withAlpha (s * 0.62f));
+    glow.addColour (0.64, b.colour.withAlpha (s * 0.46f));
+    glow.addColour (0.82, b.colour.withAlpha (s * 0.16f));
+    glow.addColour (1.00, b.colour.withAlpha (0.0f));
+
+    g.setGradientFill (glow);
+    g.fillPath (shape);
+}
+
+juce::ColourGradient AuroraField::backdrop() const
 {
     using namespace aurora_colours;
 
@@ -352,41 +375,11 @@ void AuroraField::paint (juce::Graphics& g)
     g.setGradientFill (backdrop());
     g.fillAll();
 
-    // the aurora's own light: the design's rest picture, and the fuller one a signal brings,
-    // blended by the level (both are drawn small and stretched, so they stay soft)
-    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+    const float awakeness = juce::jlimit (0.0f, 1.0f, level * 1.20f);
 
-    const float awake = juce::jlimit (0.0f, 1.0f, level * 1.15f);
-
-    if (restImage.isValid())
-    {
-        g.setOpacity (1.0f - 0.30f * awake);
-        g.drawImage (restImage, area, juce::RectanglePlacement::stretchToFit);
-    }
-
-    if (awakeImage.isValid() && awake > 0.01f)
-    {
-        g.setOpacity (0.42f * awake);
-        g.drawImage (awakeImage, area, juce::RectanglePlacement::stretchToFit);
-    }
-
-    g.setOpacity (1.0f);
-
-    // the light sits in the middle of the window and fades away towards its top and bottom,
-    // so that the aurora is a glow behind the knobs and never a painted band across them
-    {
-        juce::ColourGradient fade (bgTop.withAlpha (0.55f), 0.0f, 0.0f,
-                                   bgTop.withAlpha (0.0f), 0.0f, h * 0.42f, false);
-        fade.addColour (0.60, bgTop.withAlpha (0.06f));
-        fade.addColour (1.0, bgTop.withAlpha (0.0f));
-        g.setGradientFill (fade);
-        g.fillRect (0.0f, 0.0f, w, h * 0.42f);
-
-        juce::ColourGradient lower (bgBottom.withAlpha (0.0f), 0.0f, h * 0.55f,
-                                    bgBottom.withAlpha (0.55f), 0.0f, h, false);
-        g.setGradientFill (lower);
-        g.fillRect (0.0f, h * 0.55f, w, h * 0.45f);
-    }
+    // the design's light, and what a signal makes of it
+    for (const auto& b : bands)
+        drawBand (g, b, awakeness, w, h);
 
     // the stars: the higher bands light the ones on the right
     const auto brightness = [this] (float x)
@@ -401,44 +394,20 @@ void AuroraField::paint (juce::Graphics& g)
     for (auto& s : stars)
     {
         const float b = brightness (s.x);
-        const float twinkle = 0.70f + 0.30f * std::sin (s.twinkle + time * s.drift * 4.0f);
-        const float alpha = s.alpha * twinkle * (0.35f + 1.65f * b);
-        const float size  = s.size * fieldScale * (1.0f + 1.4f * transient);
+        const float twinkle = 0.70f + 0.30f * std::sin (s.twinkle + time * 2.4f);
+        const float alpha = s.alpha * twinkle * (0.55f + 1.60f * b);
+        const float size  = s.size * fieldScale * (1.0f + 1.2f * transient);
 
-        g.setColour (bright.withAlpha (juce::jlimit (0.0f, 0.95f, alpha)));
-        g.fillEllipse (juce::Rectangle<float> (size, size).withCentre ({ s.x * w, s.y * h }));
-    }
-
-    // the rings an onset sends outward
-    for (auto& ring : rings)
-    {
-        if (ring.alpha < 0.01f)
+        if (alpha <= 0.003f)
             continue;
 
-        const float radius = ring.radius * w;
-        const auto centre = juce::Point<float> (w * 0.5f, h * 0.45f);
-
-        g.setColour (green.withAlpha (juce::jlimit (0.0f, 0.5f, ring.alpha * 0.55f)));
-        g.drawEllipse (juce::Rectangle<float> (radius * 2.0f, radius * 2.0f).withCentre (centre),
-                       ring.width * fieldScale);
-
-        g.setColour (blue.withAlpha (juce::jlimit (0.0f, 0.35f, ring.alpha * 0.25f)));
-        g.drawEllipse (juce::Rectangle<float> (radius * 2.0f, radius * 2.0f).withCentre (centre),
-                       ring.width * 3.0f * fieldScale);
+        g.setColour (bright.withAlpha (juce::jlimit (0.0f, 0.85f, alpha)));
+        g.fillEllipse (juce::Rectangle<float> (size, size).withCentre ({ s.x * w, s.y * h }));
     }
 
     // the design's own edge, a hair line along the panel
     g.setColour (bright.withAlpha (0.055f));
     g.drawRoundedRectangle (area.reduced (0.5f), corner, 1.0f);
-
-    // the signal itself, as a soft light across the middle that follows the wet level
-    if (level > 0.01f)
-    {
-        juce::ColourGradient glow (green.withAlpha (0.10f * level), w * 0.5f, h * 0.45f,
-                                   green.withAlpha (0.0f), w * 0.5f, h, true);
-        g.setGradientFill (glow);
-        g.fillAll();
-    }
 }
 
 //==============================================================================
@@ -486,13 +455,21 @@ DAAuraAudioProcessorEditor::DAAuraAudioProcessorEditor (DAAuraAudioProcessor& p)
     };
 
     setUpLabel (presetSpace, 10.5f, 0.30f, true);
-    setUpLabel (presetName,  19.0f, 0.06f, false);
     setUpLabel (presetCount, 10.0f, 0.24f, false);
 
     presetSpace.setColour (juce::Label::textColourId, aurora_colours::green.withAlpha (0.85f));
-    presetName.setColour  (juce::Label::textColourId, aurora_colours::bright);
     presetCount.setColour (juce::Label::textColourId, aurora_colours::green.withAlpha (0.55f));
     presetCount.setJustificationType (juce::Justification::centredRight);
+
+    // the preset's name: a button, so that clicking it opens the whole list (it is drawn as
+    // plain text over the aurora: see AuroraLookAndFeel)
+    presetName.setComponentID ("presetname");
+    presetName.setName ("Preset");
+    presetName.setTooltip ("Choose a preset");
+    presetName.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    presetName.setTriggeredOnMouseDown (false);
+    presetName.onClick = [this] { showPresetMenu(); };
+    addAndMakeVisible (presetName);
 
     const auto setUpArrow = [this] (juce::TextButton& button, const char* id, const char* name)
     {
@@ -513,6 +490,14 @@ DAAuraAudioProcessorEditor::DAAuraAudioProcessorEditor (DAAuraAudioProcessor& p)
 
     startTimerHz (30);
 
+    // The size the window was last left at. It is read before the limits are set, because
+    // setting them puts the window into the smallest size allowed (and resized() would then
+    // write that size back into the state). The property comes back as a var, and a var that
+    // XML has round-tripped is a string - reading it with a cast reads both, a string included.
+    const auto saved = proc.apvts.state.getProperty ("editorWidth", baseWidth);
+    const int savedWidth = juce::jlimit (minWidth, maxWidth,
+                                         saved.isVoid() ? baseWidth : (int) saved);
+
     // resizable with a fixed aspect ratio
     const double ratio = (double) baseWidth / (double) baseHeight;
     setResizable (true, true);
@@ -520,9 +505,8 @@ DAAuraAudioProcessorEditor::DAAuraAudioProcessorEditor (DAAuraAudioProcessor& p)
     setResizeLimits (minWidth, juce::roundToInt (minWidth / ratio),
                      maxWidth, juce::roundToInt (maxWidth / ratio));
 
-    const int savedWidth = juce::jlimit (minWidth, maxWidth,
-                                         (int) proc.apvts.state.getProperty ("editorWidth", baseWidth));
-    setSize (savedWidth, juce::roundToInt (savedWidth / ratio));
+    setSize (savedWidth, juce::roundToInt ((double) savedWidth / ratio));
+    isSettingUp = false;
 }
 
 DAAuraAudioProcessorEditor::~DAAuraAudioProcessorEditor()
@@ -552,7 +536,7 @@ void DAAuraAudioProcessorEditor::refreshPresetLabels()
     if (index < 0)
     {
         presetSpace.setText ("NO PRESET",               juce::dontSendNotification);
-        presetName.setText  ("--",                      juce::dontSendNotification);
+        presetName.setButtonText ("--");
         presetCount.setText ({},                        juce::dontSendNotification);
         return;
     }
@@ -562,12 +546,56 @@ void DAAuraAudioProcessorEditor::refreshPresetLabels()
     const auto spaceIndex = proc.currentSpace();
 
     presetSpace.setText (space.toUpperCase(), juce::dontSendNotification);
-    presetName.setText  (name,               juce::dontSendNotification);
+    presetName.setButtonText (name);
     presetCount.setText (spaceIndex >= 0
                              ? juce::String (index - aura::spaces[spaceIndex].first + 1)
                                    + " / " + juce::String (aura::spaces[spaceIndex].count)
                              : juce::String (index + 1) + " / " + juce::String (aura::numPresets),
                          juce::dontSendNotification);
+}
+
+juce::PopupMenu DAAuraAudioProcessorEditor::buildPresetMenu (int current)
+{
+    // Every preset, under the space it belongs to, with the one that is on ticked - so that all
+    // fifty can be read at once, and picked.
+    juce::PopupMenu menu;
+
+    for (int s = 0; s < aura::numSpaces; ++s)
+    {
+        const auto& space = aura::spaces[s];
+
+        juce::PopupMenu group;
+
+        for (int i = space.first; i < space.first + space.count; ++i)
+            group.addItem (i + 1, juce::String (aura::presets[i].name), true, i == current);
+
+        menu.addSubMenu (juce::String (space.name).toUpperCase() + "   " + juce::String (space.count) + " presets",
+                         group, true);
+    }
+
+    return menu;
+}
+
+void DAAuraAudioProcessorEditor::showPresetMenu()
+{
+    auto menu = buildPresetMenu (proc.currentPreset());
+
+    // (it is opened under the name, as wide as the name's own room, so that it reads in place)
+    const auto where = localAreaToGlobal (presetName.getBounds());
+
+    menu.showMenuAsync (juce::PopupMenu::Options()
+                            .withTargetComponent (&presetName)
+                            .withTargetScreenArea (where.withWidth (juce::jmax (240, where.getWidth())))
+                            .withMinimumWidth (240)
+                            .withMaximumNumColumns (2),
+                        [this] (int chosen)
+                        {
+                            if (chosen > 0)
+                            {
+                                proc.applyPreset (chosen - 1);
+                                refreshPresetLabels();
+                            }
+                        });
 }
 
 void DAAuraAudioProcessorEditor::addKnob (const juce::String& paramId, const juce::String& title,
@@ -629,14 +657,17 @@ void DAAuraAudioProcessorEditor::resized()
     presetSpace.setFont (makeFont (10.5f * scale, true, 0.30f));
     presetSpace.setBounds (scaled ({ 30.0f, 58.0f, 220.0f, 14.0f }));
 
-    presetName.setFont (makeFont (19.0f * scale, false, 0.06f));
-    presetName.setBounds (scaled ({ 30.0f, 72.0f, 330.0f, 26.0f }));
+    presetName.setBounds (scaled ({ 30.0f, 69.0f, 340.0f, 30.0f }));
+    lookAndFeel.setScale (scale);
 
     presetCount.setFont (makeFont (10.0f * scale, false, 0.24f));
-    presetCount.setBounds (scaled ({ 360.0f, 78.0f, 100.0f, 16.0f }));
+    presetCount.setBounds (scaled ({ 378.0f, 78.0f, 62.0f, 16.0f }));
 
-    previousPreset.setBounds (scaled ({ 470.0f, 72.0f, 26.0f, 26.0f }));
-    nextPreset.setBounds     (scaled ({ 502.0f, 72.0f, 26.0f, 26.0f }));
+    // the two arrows, right after the preset's name (where the browser is read) rather than
+    // over the knobs; each has a box a little wider than the circle drawn in it, so that it is
+    // easy to hit
+    previousPreset.setBounds (scaled ({ 452.0f, 70.0f, 30.0f, 30.0f }));
+    nextPreset.setBounds     (scaled ({ 488.0f, 70.0f, 30.0f, 30.0f }));
 
     freezeButton.setBounds (juce::Rectangle<float> (594.0f, 26.0f, 96.0f, 24.0f)
                                 .transformedBy (juce::AffineTransform::scale (scale)).toNearestInt());
@@ -657,5 +688,7 @@ void DAAuraAudioProcessorEditor::resized()
     }
 
     // remember the size for the next time the editor is opened / the session is reloaded
-    proc.apvts.state.setProperty ("editorWidth", getWidth(), nullptr);
+    // (not while the window is being set up: the size it is given at the end is the one to keep)
+    if (getWidth() > 0 && ! isSettingUp)
+        proc.apvts.state.setProperty ("editorWidth", getWidth(), nullptr);
 }

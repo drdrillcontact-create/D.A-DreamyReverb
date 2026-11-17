@@ -39,9 +39,14 @@ private:
 };
 
 //==============================================================================
-// The aurora behind the knobs: a field of ribbons and stars that is at rest until the plug-in
-// carries a signal, and then moves with it - the ribbons swell with the wet level, the stars
-// drift with the spectrum, and each onset sends a ring of light outward from the middle.
+// The aurora behind the knobs: the design's own light - a wide green ridge sweeping up from
+// the left of the middle to the top right, a blue-violet one following above it, a low teal
+// wash and a purple one on the right - which, while the plug-in carries a signal, opens out,
+// travels, and lights a few stars with the spectrum. At rest it is exactly the design.
+//
+// It is drawn as a handful of soft bands, each a filled path with a vertical gradient, so that
+// what the screen shows is the same on every platform (a small pre-blurred image, stretched,
+// is what the design's own haze looked like on Linux but not on Windows).
 class AuroraField : public juce::Component
 {
 public:
@@ -55,47 +60,44 @@ public:
     void setFieldScale (float newScale) noexcept   { fieldScale = newScale; }
 
 private:
-    struct Ribbon
+    /** One band of light: where its centre line runs, how wide and how bright it is. */
+    struct Band
     {
-        float phase = 0.0f;       // where the ribbon's own wave is
-        float speed = 0.0f;       // how fast it travels at rest
-        float height = 0.0f;      // its line through the middle, 0..1 of the height
-        float thickness = 1.0f;
-        float amp = 0.0f;         // how far it wanders
-        float tilt = 0.0f;        // how far it leans across the window
+        juce::Point<float> from { 0.0f, 0.5f }, to { 1.0f, 0.1f };  // the centre line, 0..1
+        float bow = 0.0f;        // how far the line bows away from straight, 0..1 of the height
+        float width = 0.10f;     // its thickness, 0..1 of the height
+        float strength = 0.5f;   // how bright it is
+        float reach = 1.0f;      // how far along the width its light reaches (0..1 = to the end)
+        float fadeIn = 0.12f;    // how quickly it comes in from its start
         juce::Colour colour;
-        float alpha = 0.0f;
+        float wave = 0.0f;       // how far the signal makes it undulate, 0..1 of the height
+        float phase = 0.0f;      // where its own wave is
+        float speed = 1.0f;      // how fast that wave travels
+        float lift = 0.0f;       // how much a signal lifts it towards the middle
     };
 
+    /** A point of light in the dark top of the window, which the spectrum makes twinkle. */
     struct Star
     {
-        float x = 0.0f, y = 0.0f;     // 0..1 of the width and height
-        float size = 1.0f, alpha = 0.0f, twinkle = 0.0f, drift = 0.0f;
+        float x = 0.0f, y = 0.0f;
+        float size = 1.0f, alpha = 0.0f, twinkle = 0.0f;
     };
 
-    struct Ring
-    {
-        float radius = 0.0f;          // 0..1 of the width
-        float alpha = 0.0f;
-        float width = 1.0f;
-    };
+    juce::ColourGradient backdrop() const;
 
-    juce::ColourGradient backdrop();
+    /** The centre line of a band at `t` along the width (0..1), as a fraction of the height. */
+    float centreAt (const Band&, float t, float awakeness) const;
 
-    /** The whole aurora, drawn at a sixth of the window's size and blurred once.
-        `strength` 0 draws the design's rest picture, 1 the one a full signal brings. */
-    void buildAuroraImage (juce::Image& target, float strength) const;
+    /** Draws one band as a soft, filled shape. */
+    void drawBand (juce::Graphics&, const Band&, float awakeness, float w, float h) const;
 
     float fieldScale = 1.0f;
     float level = 0.0f, transient = 0.0f, delayLevel = 0.0f;
     float band[aura::Reverb::Life::numBands] {};
     float time = 0.0f;
 
-    std::array<Ribbon, 7> ribbons;
-    juce::Image restImage, awakeImage;
-    std::array<Star, 96> stars;
-    std::array<Ring, 4> rings;
-    int nextRing = 0;
+    std::array<Band, 7> bands;
+    std::array<Star, 80> stars;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AuroraField)
 };
@@ -112,6 +114,10 @@ public:
     void resized() override;
 
     void timerCallback() override;
+
+    /** The list of every preset, by space, with the one that is on ticked.
+        (Made without showing it, which is what the tests read: every preset in it, once.) */
+    static juce::PopupMenu buildPresetMenu (int current);
 
     static constexpr int baseWidth  = 720;
     static constexpr int baseHeight = 430;
@@ -133,6 +139,9 @@ private:
     void addKnob (const juce::String& paramId, const juce::String& title, float cx, float cy, float radius);
     void refreshPresetLabels();
 
+    /** The list of every preset, by space, with the one that is on ticked: opens under the name. */
+    void showPresetMenu();
+
     DAAuraAudioProcessor& proc;
     AuroraLookAndFeel lookAndFeel;
     AuroraField field;
@@ -140,15 +149,17 @@ private:
     // the product's name, drawn over the aurora (a label, so that it sits in front of the field)
     juce::Label  title;
 
-    // the preset browser: the space, the preset's name, and the arrows that step through it
+    // the preset browser: the space, the preset's name (which opens the list when clicked),
+    // how far through the space it is, and the arrows
     juce::Label  presetSpace;
-    juce::Label  presetName;
+    juce::TextButton presetName;      // (the name, over the aurora: the whole of it opens the list)
     juce::Label  presetCount;
     juce::TextButton previousPreset;   // (the arrows are drawn in AuroraLookAndFeel, not letters)
     juce::TextButton nextPreset;
     bool previousHovered = false, nextHovered = false;
 
     int shownPreset = -2;    // (what the labels last showed, so they are only touched when it changes)
+    bool isSettingUp = true; // (the window is taking its first size: that one is not written back)
 
     juce::OwnedArray<Knob> knobs;
     juce::TextButton freezeButton { "FREEZE" };
