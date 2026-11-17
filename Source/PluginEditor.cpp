@@ -195,11 +195,11 @@ AuroraField::AuroraField()
         { { -0.06f, 0.55f }, { 1.06f, 0.09f }, 0.05f, 0.180f, 0.52f, 1.00f, 0.05f, green,  0.024f, 0.0f, 0.9f, 0.10f },
         { { -0.06f, 0.47f }, { 1.06f, 0.15f }, 0.04f, 0.165f, 0.29f, 1.00f, 0.08f, green,  0.030f, 2.6f, 1.0f, 0.08f },
         // the blue-violet above and to the right of it
-        { { 0.10f, 0.30f }, { 1.06f, 0.01f }, 0.02f, 0.200f, 0.26f, 1.00f, 0.12f, blue,   0.026f, 1.7f, 0.8f, 0.08f },
+        { { 0.22f, 0.26f }, { 1.06f, 0.00f }, 0.02f, 0.240f, 0.40f, 1.00f, 0.10f, blue,   0.026f, 1.7f, 0.8f, 0.08f },
         // the low teal wash across the lower half
         { { -0.06f, 0.76f }, { 1.06f, 0.58f }, 0.03f, 0.160f, 0.22f, 1.00f, 0.06f, green,  0.030f, 3.1f, 1.1f, 0.06f },
         // a purple one towards the right, low down
-        { { 0.30f, 0.68f }, { 1.06f, 0.44f }, 0.03f, 0.160f, 0.17f, 1.00f, 0.12f, purple, 0.026f, 4.4f, 1.0f, 0.05f },
+        { { 0.34f, 0.72f }, { 1.06f, 0.46f }, 0.03f, 0.250f, 0.34f, 1.00f, 0.10f, purple, 0.026f, 4.4f, 1.0f, 0.06f },
         // the even glow the design has right across the middle of the window
         { { -0.06f, 0.68f }, { 1.06f, 0.28f }, 0.06f, 0.320f, 0.15f, 1.00f, 0.08f, green,  0.034f, 5.3f, 0.7f, 0.06f },
         // and a faint one across the upper middle, which is where the design's light is widest

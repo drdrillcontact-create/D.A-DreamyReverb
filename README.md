@@ -38,6 +38,24 @@ The window shows the space, the preset's name and how far through the space it i
 arrows that step back and forward through that space (wrapping around inside it). The same fifty
 presets are the plug-in's programs, so the host's own preset menu lists them too.
 
+## Presets
+
+Fifty factory presets, in five spaces of ten:
+
+| Space | Presets |
+| - | - |
+| **Rooms** | Small Room, Studio Room, Drum Room, Live Room, Garage, Chapel, Large Hall, Concert Hall, Amphitheatre, Empty Arena |
+| **Plates** | Drum Plate, Thin Plate, Pop Plate, Bright Plate, Dark Plate, Vocal Plate, Vintage Plate, Wide Plate, Metallic Plate, Thick Plate |
+| **Spaces** | Underpass, Parking Garage, Tunnel, Stairwell, Cave, Indoor Pool, Church, Cathedral, Canyon, Cistern |
+| **Dreams** | Slow Motion, Dreamy Cloud, Shimmer Veil, Halo Pad, Night Sky, Angel Choir, Lucid Dream, Aurora Borealis, Ethereal Wash, Weightless |
+| **Extremes** | Broken Radio, Bloom, Submerged, Ghost Ship, Time Warp, Frozen Glass, Deep Space, Endless Rise, Black Hole, Infinite |
+
+**Click the preset's name** to open all fifty, grouped by the five spaces (the one that is on is
+ticked). The two arrows beside it step to the next and the previous preset of the same space. The
+knobs can be moved freely afterwards; the name then reads the preset the settings came from.
+
+The window remembers the size it was left at.
+
 ## Controls
 
 | Knob | What it does |
