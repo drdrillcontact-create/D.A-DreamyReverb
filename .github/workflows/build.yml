@@ -373,12 +373,11 @@ jobs:
         run: |
           set -e
           mkdir -p files
-          echo "--- what arrived:"
-          find incoming -type f | head -40
-          # every zip that arrived, wherever the download put it
-          find incoming -type f -name '*.zip' -exec cp -v {} files/ \;
+          # (the uploads were made with archive: false, so each artifact is the file itself;
+          #  a name that ends in .zip is the file, anything else is a folder to look inside)
+          cp -v incoming/D.A-AURA-* files/ 2>/dev/null || true
+          find incoming -type f -exec cp -v {} files/ \;
           ls -la files
-          # (the installer and plug-in zips are the four that matter)
           for f in D.A-AURA-Windows-Installer.zip D.A-AURA-Windows-x64-VST3.zip \
                    D.A-AURA-macOS-Installer.zip D.A-AURA-macOS-Universal-AU-VST3.zip; do
             [ -f "files/$f" ] || { echo "::error title=A file is missing::$f did not arrive from the build"; exit 1; }
@@ -400,12 +399,15 @@ jobs:
             "files/D.A-AURA-Windows-x64-VST3.zip"
             "files/D.A-AURA-macOS-Installer.zip"
             "files/D.A-AURA-macOS-Universal-AU-VST3.zip"
-            "files/D.A-AURA-Windows-installer-pictures.zip"
-            "files/D.A-AURA-macOS-installer-pictures.zip"
           )
 
           for a in "${assets[@]}"; do
             [ -f "$a" ] || { echo "::error title=A file is missing::The build did not produce $a"; exit 1; }
+          done
+
+          # (the pictures are a convenience: they are put up when they are there)
+          for p in "files/D.A-AURA-Windows-installer-pictures.zip" "files/D.A-AURA-macOS-installer-pictures.zip"; do
+            [ -f "$p" ] && assets+=("$p")
           done
 
           notes="D.A AURA $VERSION, built from $GITHUB_SHA.
