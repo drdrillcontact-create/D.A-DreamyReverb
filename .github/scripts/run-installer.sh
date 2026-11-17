@@ -134,10 +134,26 @@ if [ -n "$sheet" ]; then
   elif [ -z "$where" ] || [ -z "$frame" ] || [ ! -s "$pictures/screen-welcome.png" ]; then
     echo "compare: [SKIP] there is no photograph of the first page to look at" >> "$log"
   else
-    # shellcheck disable=SC2086
-    "$python" "$here/look-at-screenshot.py" "$pictures/screen-welcome.png" "$sheet" $where $frame \
-      "$here/../../Installer/Assets/picture.png" >> "$log" 2>&1
-    looked=$?
+    # A photograph can catch something that crossed the screen for a moment (the pointer, a
+    # tooltip the system put up); the window itself is known to be right from the sum of its
+    # pixels, compared further down. So a photograph that does not match is taken again, up to
+    # three times, before the window is said not to be the design on the screen.
+    try=1
+    while :; do
+      # shellcheck disable=SC2086
+      "$python" "$here/look-at-screenshot.py" "$pictures/screen-welcome.png" "$sheet" $where $frame \
+        "$here/../../Installer/Assets/picture.png" >> "$log" 2>&1
+      looked=$?
+
+      [ "$looked" -eq 1 ] || break
+      [ "$try" -lt 3 ] || break
+
+      echo "compare: the photograph of the first page did not match; it is taken again ($((try + 1)) of 3)" >> "$log"
+      try=$((try + 1))
+      sleep 1
+      # shellcheck disable=SC2086
+      bash "$here/capture-screen.sh" "$pictures/screen-welcome.png" $where >> "$photographs" 2>&1 || break
+    done
   fi
 
   case "$looked" in
