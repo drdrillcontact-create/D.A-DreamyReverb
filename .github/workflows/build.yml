@@ -363,14 +363,23 @@ jobs:
         id: version
         run: echo "number=$(sed -n 's/^ *project *( *[A-Za-z0-9_]* *VERSION *\([0-9.]*\).*/\1/p' CMakeLists.txt | head -n 1)" >> "$GITHUB_OUTPUT"
 
+      # (each artifact is a zip holding the zip the step named: what is wanted is the inner one)
       - name: Collect the files
         uses: actions/download-artifact@v5
         with:
-          path: files
-          merge-multiple: true
+          path: incoming
 
-      - name: List what is being released
-        run: ls -la files
+      - name: Put the files in one folder
+        run: |
+          set -e
+          mkdir -p files
+          find incoming -type f -name '*.zip' -exec cp -v {} files/ \;
+          ls -la files
+          # (the installer and plug-in zips are the four that matter)
+          for f in D.A-AURA-Windows-Installer.zip D.A-AURA-Windows-x64-VST3.zip \
+                   D.A-AURA-macOS-Installer.zip D.A-AURA-macOS-Universal-AU-VST3.zip; do
+            [ -f "files/$f" ] || { echo "::error title=A file is missing::$f did not arrive from the build"; exit 1; }
+          done
 
       # The plug-in and its installer, for both systems, and the two pictures of the installer's
       # windows (so that what is in them can be seen without running anything).
