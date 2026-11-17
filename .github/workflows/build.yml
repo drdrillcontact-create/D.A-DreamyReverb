@@ -147,12 +147,14 @@ jobs:
       - name: Upload the installer
         uses: actions/upload-artifact@v7
         with:
+          name: windows-installer
           path: D.A-AURA-Windows-Installer.zip
           if-no-files-found: error
 
       - name: Upload the VST3 on its own
         uses: actions/upload-artifact@v7
         with:
+          name: windows-vst3
           path: D.A-AURA-Windows-x64-VST3.zip
           if-no-files-found: error
 
@@ -168,6 +170,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
+          name: windows-installer-pictures
           path: D.A-AURA-Windows-installer-pictures.zip
           if-no-files-found: warn
 
@@ -313,12 +316,14 @@ jobs:
       - name: Upload the installer
         uses: actions/upload-artifact@v7
         with:
+          name: macos-installer
           path: D.A-AURA-macOS-Installer.zip
           if-no-files-found: error
 
       - name: Upload the AU and VST3 on their own
         uses: actions/upload-artifact@v7
         with:
+          name: macos-au-vst3
           path: D.A-AURA-macOS-Universal-AU-VST3.zip
           if-no-files-found: error
 
@@ -333,6 +338,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
+          name: macos-installer-pictures
           path: D.A-AURA-macOS-installer-pictures.zip
           if-no-files-found: warn
 
@@ -361,6 +367,7 @@ jobs:
       - name: Collect the files
         uses: actions/download-artifact@v5
         with:
+          pattern: '*'
           path: incoming
 
       # Whatever the download produced - folders, plain files, or zips holding zips - this puts
