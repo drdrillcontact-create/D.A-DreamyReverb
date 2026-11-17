@@ -373,6 +373,9 @@ jobs:
         run: |
           set -e
           mkdir -p files
+          echo "--- what arrived:"
+          find incoming -type f | head -40
+          # every zip that arrived, wherever the download put it
           find incoming -type f -name '*.zip' -exec cp -v {} files/ \;
           ls -la files
           # (the installer and plug-in zips are the four that matter)
