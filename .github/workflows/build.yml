@@ -148,14 +148,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           path: D.A-AURA-Windows-Installer.zip
-          archive: false
           if-no-files-found: error
 
       - name: Upload the VST3 on its own
         uses: actions/upload-artifact@v7
         with:
           path: D.A-AURA-Windows-x64-VST3.zip
-          archive: false
           if-no-files-found: error
 
       - name: Package the installer's pictures
@@ -171,7 +169,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           path: D.A-AURA-Windows-installer-pictures.zip
-          archive: false
           if-no-files-found: warn
 
   build-macos:
@@ -317,14 +314,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           path: D.A-AURA-macOS-Installer.zip
-          archive: false
           if-no-files-found: error
 
       - name: Upload the AU and VST3 on their own
         uses: actions/upload-artifact@v7
         with:
           path: D.A-AURA-macOS-Universal-AU-VST3.zip
-          archive: false
           if-no-files-found: error
 
       - name: Package the installer's pictures
@@ -339,7 +334,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           path: D.A-AURA-macOS-installer-pictures.zip
-          archive: false
           if-no-files-found: warn
 
   # The files as they reach somebody: one place to download them from, that does not expire
