@@ -53,10 +53,27 @@ presets are the plug-in's programs, so the host's own preset menu lists them too
 | Width | Stereo width of the wet signal (0 to 150 %) |
 | Freeze | Holds the current tail forever and mutes new input |
 
+## Download
+
+The files to download are on the **[latest release](https://github.com/drdrillcontact-create/D.A-DreamyReverb/releases/latest)**
+— nothing to build, and no GitHub account needed:
+
+| File | For | Holds |
+| - | - | - |
+| `D.A-AURA-Windows-Installer.zip` | Windows 64-bit | `D.A AURA Installer.exe` |
+| `D.A-AURA-Windows-x64-VST3.zip` | Windows 64-bit | `D.A AURA.vst3` |
+| `D.A-AURA-macOS-Installer.zip` | macOS, Apple Silicon and Intel | `D.A AURA Installer.app` |
+| `D.A-AURA-macOS-Universal-AU-VST3.zip` | macOS, Apple Silicon and Intel | `D.A AURA.component` + `D.A AURA.vst3` |
+
+(A release is made by every build on the main branch, and by a manual run of the workflow with
+**publish** ticked; its files are replaced by the newest build of the same version, so the link
+above stays the same.)
+
 ## Build with GitHub Actions
 
 1. Push to GitHub; the **Build D.A AURA** workflow starts automatically (or run it manually via **Actions -> Build D.A AURA -> Run workflow**).
-2. Download the build artifacts at the bottom of the workflow run:
+2. Download the files from the workflow run's artifacts (kept for ninety days), or from the release
+   the run makes when it is on the main branch (`v1.0.0` for this version):
    * `D.A-AURA-Windows-Installer.zip` (`D.A AURA Installer.exe`)
    * `D.A-AURA-macOS-Installer.zip` (`D.A AURA Installer.app`)
    * `D.A-AURA-Windows-x64-VST3.zip` (`D.A AURA.vst3`)
