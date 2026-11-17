@@ -409,6 +409,27 @@ jobs:
             [ -f "files/$name" ] || { echo "::error title=A file is missing::$name did not arrive from the build"; exit 1; }
           done
 
+          # Each of the four has to hold what it says it does, and not another zip: this is what
+          # is given to people to download, so it is looked into before it is put up.
+          looks_into() {
+            name="$1"; shift
+            echo "--- $name holds:"
+            unzip -Z1 "files/$name" | head -n 6
+            for wanted in "$@"; do
+              unzip -Z1 "files/$name" | grep -q -- "$wanted" \
+                || { echo "::error title=The file is not what it should be::files/$name does not hold $wanted"; exit 1; }
+            done
+            if [ "$(unzip -Z1 "files/$name" | wc -l)" -eq 1 ] && unzip -Z1 "files/$name" | grep -q '\.zip$'; then
+              echo "::error title=The file is not what it should be::files/$name holds nothing but another zip"
+              exit 1
+            fi
+          }
+
+          looks_into D.A-AURA-Windows-Installer.zip          "D.A AURA Installer.exe"
+          looks_into D.A-AURA-Windows-x64-VST3.zip            "D.A AURA.vst3/"
+          looks_into D.A-AURA-macOS-Installer.zip             "D.A AURA Installer.app/"
+          looks_into D.A-AURA-macOS-Universal-AU-VST3.zip     "D.A AURA.component/" "D.A AURA.vst3/"
+
       # The plug-in and its installer, for both systems, and the two pictures of the installer's
       # windows (so that what is in them can be seen without running anything).
       - name: Make the release
